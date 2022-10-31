@@ -1,7 +1,6 @@
 from multiprocessing.sharedctypes import Value
 import numpy as np
 import pandas as pd
-import numpy.typing as npt
 from numpy.typing import ArrayLike
 from dynamo.controllers import get_ctrl_from_config, FbLinearizationCtrl, Controller
 from dynamo.models import DynamicSystem
@@ -16,7 +15,7 @@ from dynamo.utils import Bunch
 
 class DroneStates(Bunch):
 
-    def __init__(self, state_vector: npt.ArrayLike):
+    def __init__(self, state_vector: ArrayLike):
 
         state_vector = np.array(state_vector).flatten()
         if len(state_vector) != 11:
@@ -63,7 +62,7 @@ class DroneController(Controller):
         ref_y: Callable[[Number],Number], ref_dy: Callable[[Number],Number], ref_ddy: Callable[[Number],Number], 
         ref_z: Callable[[Number],Number], ref_dz: Callable[[Number],Number], ref_ddz: Callable[[Number],Number], 
         ref_psi: Callable[[Number],Number], ref_dpsi: Callable[[Number],Number], ref_ddpsi: Callable[[Number],Number], 
-        A: npt.ArrayLike, jx: Number, jy: Number, jz: Number, g: Number, mass: Number, 
+        A: ArrayLike, jx: Number, jy: Number, jz: Number, g: Number, mass: Number, 
         x_controller: Dict[str, Any], y_controller: Dict[str, Any], z_controller: Dict[str, Any],
         psi_controller: Dict[str, Any], phi_controller: Dict[str, Any], theta_controller: Dict[str, Any], 
         log_internals:bool=False):
@@ -146,7 +145,7 @@ class DroneController(Controller):
         self.theta_controller = get_ctrl_from_config(theta_controller)[0]
         self.psi_controller = get_ctrl_from_config(psi_controller)[0]
 
-    def compute(self, t: Number, xs: npt.ArrayLike, output_only:bool=False) -> Union[np.ndarray, dict]:
+    def compute(self, t: Number, xs: ArrayLike, output_only:bool=False) -> Union[np.ndarray, dict]:
         # phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs
         
         phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz, \
@@ -221,7 +220,7 @@ class DroneController(Controller):
                     dpsi=dpsi, dtheta=dtheta, dphi=dphi, dx=dx, dy=dy, dz=dz)
             return res
 
-    def output(self, t: Number, xs: npt.ArrayLike) -> np.ndarray:
+    def output(self, t: Number, xs: ArrayLike) -> np.ndarray:
         if self.log_internals:
             res = self.compute(t, xs, output_only=False)
             self._log_values(**res)
@@ -238,7 +237,7 @@ class DroneController(Controller):
 class Drone(DynamicSystem):
 
     def __init__(self, jx: Number, jy: Number, jz: Number,
-        g: Number, mass: Number, A:npt.ArrayLike):
+        g: Number, mass: Number, A:ArrayLike):
         """
         Parameters
         ------------
@@ -269,7 +268,7 @@ class Drone(DynamicSystem):
         self.mass = mass
         self.A = np.array(A, dtype=np.float64)
     
-    def dx(self, t: Number, xs: npt.ArrayLike, fi: npt.ArrayLike) -> np.ndarray:
+    def dx(self, t: Number, xs: ArrayLike, fi: ArrayLike) -> np.ndarray:
         f, m_x, m_y, m_z = np.dot(self.A, fi)
         f_over_m = f/self.mass
         phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz, _, _ = xs
