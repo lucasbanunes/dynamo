@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import numpy.typing as npt
 from numpy.typing import ArrayLike
-from packages.controllers import get_ctrl_from_config, FbLinearizationCtrl, Controller
-from packages.models import DynamicSystem
-from packages.utils import is_callable, is_numeric, is_instance
-from packages.typing import CtrlLike
+from dynamo.controllers import get_ctrl_from_config, FbLinearizationCtrl, Controller
+from dynamo.models import DynamicSystem
+from dynamo.utils import is_callable, is_numeric, is_instance
+from dynamo.typing import CtrlLike
 from typing import Callable, Union, Dict, Any
 from numbers import Number
 # from autograd import elementwise_grad as egrad

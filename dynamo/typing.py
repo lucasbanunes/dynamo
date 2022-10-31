@@ -1,4 +1,4 @@
 from typing import Union, Dict, Any
-from packages.controllers import Controller
+from dynamo.controllers import Controller
 
 CtrlLike = Union[Controller, Dict[str, Any]]

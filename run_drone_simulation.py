@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import packages.drone as drone_models
+import dynamo.drone as drone_models
 from scipy.integrate import solve_ivp
 from datetime import datetime
 
