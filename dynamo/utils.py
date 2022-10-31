@@ -1,5 +1,13 @@
 from numbers import Number
 
+class Bunch(object):
+
+    def __init__(self, **kwargs):
+        self.__dict__ = kwargs
+
+    def __getitem__(self, key:str):
+        return self.__dict__[key]
+
 def is_callable(obj: object):
     if callable(obj):
         return True

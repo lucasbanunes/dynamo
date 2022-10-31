@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import numpy as np
 import pandas as pd
 import numpy.typing as npt
@@ -11,26 +12,30 @@ from numbers import Number
 # from autograd import elementwise_grad as egrad
 # import autograd.numpy as anp
 from collections import defaultdict
+from dynamo.utils import Bunch
+
+class DroneStates(Bunch):
+
+    def __init__(self, state_vector: npt.ArrayLike):
+
+        state_vector = np.array(state_vector).flatten()
+        if len(state_vector) != 11:
+            raise ValueError(f'The state vector should have 11 elements but len was {len(state_vector)}')
+
+        super().__init__(
+            phi = state_vector[0], dphi = state_vector[1],
+            theta = state_vector[2], dtheta = state_vector[3],
+            psi = state_vector[4], dpsi = state_vector[5],
+            x = state_vector[6], dx = state_vector[7],
+            y = state_vector[8], dy = state_vector[9],
+            z = state_vector[10], dz = state_vector[11],
+            vector=state_vector)
 
 states_names = ['phi', 'dphi', 'theta', 'dtheta', 'psi', 'dpsi', 'x', 'dx', 'y', 'dy', 'z', 'dz',
         'x_ctrl_states', 'y_ctrl_states', 'z_ctrl_states',
         'phi_ctrl_states', 'theta_ctrl_states', 'psi_ctrl_states']
 states_idxs = np.arange(len(states_names))
 names_idxs = {key: value for key, value in zip(states_names, states_idxs)}
-
-# def parse_states(states: np.ndarray):
-
-#     phi = states[0]; dphi = states[1]
-#     theta = states[2]; dtheta = states[3]
-#     psi = states[4]; dpsi = states[5]
-#     x = states[6]; dx = states[7]
-#     y = states[8]; dy = states[9]
-#     z = states[10]; dz = states[11]
-#     phi_ctrl_states = states[12]
-#     theta_ctrl_states = states[13]
-    
-#     return phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz, \
-#         phi_ctrl_states, theta_ctrl_states
 
 class ZFbLinearizationCtrl(FbLinearizationCtrl):
 
