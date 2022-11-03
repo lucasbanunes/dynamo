@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
 from .models import DynamicSystem, LinearStateSpaceSystem
 from .utils import is_callable, is_instance
-from .typing import CtrlLike
 import numpy as np
 from numpy.typing import ArrayLike
 from numbers import Number
-from typing import Callable, Any, Dict, List
+from typing import Any, Dict, List, Union
 
 class Controller(DynamicSystem):
     """
@@ -63,6 +62,7 @@ class Controller(DynamicSystem):
             Controller output
         """
         return super().dx(t, x, refs-input_x, **kwargs)
+CtrlLike = Union[Controller, Dict[str, Any]]
 
 class LinearController(LinearStateSpaceSystem,Controller):
     """
@@ -280,4 +280,4 @@ def get_ctrl_from_config(config_dict: Dict[str, Any]) -> List[Controller]:
     locals_dict = locals()
     controllers = [locals_dict[ctrl_class](**ctrl_config) 
         for ctrl_class, ctrl_config in config_dict.items()]
-    return controllers       
+    return controllers

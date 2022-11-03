@@ -1,6 +1,7 @@
 from numbers import Number
 from numpy.typing import ArrayLike
 import numpy as np
+import pandas as pd
 
 class Bunch(object):
 
@@ -9,6 +10,9 @@ class Bunch(object):
 
     def __getitem__(self, key:str):
         return self.__dict__[key]
+    
+    def items(self):
+        return self.__dict__.items()
 
 class VectorBunch(Bunch):
 

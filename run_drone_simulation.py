@@ -4,9 +4,11 @@ import dynamo.drone as drone_models
 from scipy.integrate import solve_ivp
 from datetime import datetime
 
+
+filename = 'drone_sim_out_proportional.csv'
 gravity = 10
 drone_mass = 1
-time_range = (0,10)     # Seconds
+time_range = (0,60)     # Seconds
 phi0 = 0.01
 dphi0 = 0
 theta0 = 0.01
@@ -19,7 +21,7 @@ y0 = 0
 dy0 = 0
 z0 = 0
 dz0 = 0
-initial_states = [phi0, dphi0, theta0, dtheta0, psi0, dpsi0, x0, dx0, y0, dy0, z0, dz0, 0, 0]
+initial_states = [phi0, dphi0, theta0, dtheta0, psi0, dpsi0, x0, dx0, y0, dy0, z0, dz0]
 
 d=1
 ctau=1
@@ -82,17 +84,16 @@ res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, max_step=
 print(f'Simulation outputted status {res.status}. "{res.message}"')
 
 # Saving output
-exec_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
-filename = 'test_drone_sim_out.csv'# f'{exec_time}_drone_sim_out.npz'
+exec_time = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')# f'{exec_time}_drone_sim_out.npz'
 sim_out = np.concatenate((res.t.reshape(1,-1), res.y),axis=0).T
 sim_out = pd.DataFrame(sim_out,columns=['t']+drone_models.states_names)
-ctrl_internals = controller.compute(sim_out['t'].values, sim_out[drone_models.states_names].values)
+ctrl_internals = controller.compute(sim_out['t'].values, sim_out[drone_models.states_names].values.T)
 for key, value in ctrl_internals.items():
-    if key != 't':
+    if key != 't' and (not key in drone_models.states_names) and value.ndim == 1:
         sim_out[key] = value
 sim_out.to_csv(filename)
 
-internals_df = pd.DataFrame.from_dict(controller.internals)
-internals_df.to_csv('test_internals_' + filename)
+# internals_df = pd.DataFrame.from_dict(controller.internals)
+# internals_df.to_csv('test_internals_' + filename)
 
 print('End')
