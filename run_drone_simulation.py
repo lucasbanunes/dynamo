@@ -5,7 +5,6 @@ from scipy.integrate import solve_ivp
 from datetime import datetime
 
 
-filename = 'drone_sim_out_proportional.csv'
 gravity = 10
 drone_mass = 1
 time_range = (0,60)     # Seconds
@@ -33,7 +32,7 @@ A = np.array([
     ctau*s,
 ], dtype=np.float64)
 
-controler_kwargs = dict(
+controller_kwargs = dict(
     ref_x = lambda t: t**0,
     ref_dx = lambda t: t-t,
     ref_ddx = lambda t: t-t,
@@ -64,7 +63,8 @@ controler_kwargs = dict(
     jx=1,
     jy=1,
     jz=1,
-    log_internals=False
+    log_internals=False,
+    direction_ctrl_strat='proportional'
 )
 
 drone_kwargs = dict(
@@ -76,7 +76,8 @@ drone_kwargs = dict(
     A=A
 )
 
-controller = drone_models.DroneController(**controler_kwargs)
+filename = f'drone_sim_out_{controller_kwargs["direction_ctrl_strat"]}.csv'
+controller = drone_models.DroneController(**controller_kwargs)
 drone = drone_models.Drone(**drone_kwargs)
 controled_drone = drone_models.ControledDrone(controller, drone)
 res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, max_step=1e-2)

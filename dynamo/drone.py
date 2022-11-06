@@ -8,8 +8,8 @@ from dynamo.mechanics import get_2d_rot_inv_matrix
 # from dynamo.typing import CtrlLike
 from typing import Callable, Union, Dict, Any, Tuple
 from numbers import Number
-# from autograd import elementwise_grad as egrad
-# import autograd.numpy as anp
+from autograd import elementwise_grad as egrad
+import autograd.numpy as anp
 from collections import defaultdict
 from dynamo.utils import Bunch
 
@@ -68,8 +68,7 @@ class DroneController(Controller):
         kp_phi:Number, kd_phi:Number, kp_theta:Number, kd_theta:Number, kp_psi:Number, kd_psi:Number,
         A: ArrayLike, jx: Number, jy: Number, jz: Number,
         g: Number, mass: Number, log_internals:bool=False,
-        ref_theta: Callable[[Number],Number]=None, ref_dtheta: Callable[[Number],Number]=None, ref_ddtheta: Callable[[Number],Number]=None,
-        ref_phi: Callable[[Number],Number]=None, ref_dphi: Callable[[Number],Number]=None, ref_ddphi: Callable[[Number],Number]=None):
+        direction_ctrl_strat='proportional'):
         """
         Parameters
         ------------
@@ -190,13 +189,11 @@ class DroneController(Controller):
         is_numeric(jz)
         self.jz = np.float64(jz)
 
-        self.ref_phi = get_ref_phi
-        self.ref_theta = get_ref_theta
-
         # Configs
         is_instance(log_internals, bool)
         self.log_internals = log_internals
         self.internals = defaultdict(list)
+        self.direction_ctrl_strat = str(direction_ctrl_strat)
     
     def compute(self, t: Number, state_vector: ArrayLike) -> Union[np.ndarray, dict]:
         # phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs
@@ -232,30 +229,53 @@ class DroneController(Controller):
         xs.e_dy = xs.ref_dy - xs.dy
         xs.u_y = self.kp_y*xs.e_y + self.kd_y*xs.e_dy + xs.ref_ddy
 
-        # xs.ref_phi, xs.ref_theta = get_refs(
-        #     xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+        if self.direction_ctrl_strat == 'step':
+            xs.ref_phi = np.full(shape=xs.phi.shape, fill_value=np.pi/4)
+            xs.ref_dphi = np.full(shape=xs.phi.shape, fill_value=0)
+            xs.ref_ddphi = np.full(shape=xs.phi.shape, fill_value=0)
+            xs.e_phi = xs.ref_phi-xs.phi
+            xs.e_dphi = xs.ref_dphi-xs.dphi
+            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
+            xs.ref_theta = np.full(shape=xs.theta.shape, fill_value=np.pi/4)
+            xs.ref_dtheta = np.full(shape=xs.theta.shape, fill_value=0)
+            xs.ref_ddtheta = np.full(shape=xs.theta.shape, fill_value=0)
+            xs.e_theta = xs.ref_theta-xs.theta
+            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
+            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
+        
+        elif self.direction_ctrl_strat == 'proportional':
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.e_phi = xs.ref_phi-xs.phi
+            xs.u_phi = self.kp_phi*xs.e_phi
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.e_theta = xs.ref_theta-xs.theta
+            xs.u_theta = self.kp_theta*xs.e_theta
+        
+        elif self.direction_ctrl_strat == 'almost_derivative':
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.e_phi = xs.ref_phi-xs.phi
+            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_theta*xs.dphi
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.e_theta = xs.ref_theta-xs.theta
+            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.dtheta
+        
+        elif self.direction_ctrl_strat == 'autograd':
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.ref_dphi = get_ref_dphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.ref_ddphi = get_ref_ddphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.e_phi = xs.ref_phi-xs.phi
+            xs.e_dphi = xs.ref_dphi-xs.dphi
+            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
 
-        # phi control
-        # xs.ref_phi = np.full(shape=xs.phi.shape, fill_value=np.pi/4)
-        # xs.ref_dphi = np.full(shape=xs.phi.shape, fill_value=0)
-        # xs.ref_ddphi = np.full(shape=xs.phi.shape, fill_value=0)
-        # xs.e_phi = xs.ref_phi-xs.phi
-        # xs.e_dphi = xs.ref_dphi-xs.dphi
-        # xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
-        xs.ref_phi = self.ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
-        xs.e_phi = xs.ref_phi-xs.phi
-        xs.u_phi = self.kp_phi*xs.e_phi# - self.kd_phi*xs.dphi
-
-        # theta control
-        # xs.ref_theta = np.full(shape=xs.theta.shape, fill_value=np.pi/4)
-        # xs.ref_dtheta = np.full(shape=xs.theta.shape, fill_value=0)
-        # xs.ref_ddtheta = np.full(shape=xs.theta.shape, fill_value=0)
-        # xs.e_theta = xs.ref_theta-xs.theta
-        # xs.e_dtheta = xs.ref_dtheta-xs.dtheta
-        # xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
-        xs.ref_theta = self.ref_theta(xs.u_x, xs.u_y, xs.ref_psi, xs.ref_phi, xs.f, self.mass)
-        xs.e_theta = xs.ref_theta-xs.theta
-        xs.u_theta = self.kp_theta*xs.e_theta# - self.kd_theta*xs.dtheta
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.ref_dtheta = get_ref_dtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.ref_ddtheta = get_ref_ddtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.e_theta = xs.ref_theta-xs.theta
+            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
+            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
+        
+        else:
+            raise ValueError(f'{self.direction_ctrl_strat} value for direction_ctrl_strat is not supported')
 
         # psi control
         xs.e_psi = xs.ref_psi-xs.psi
@@ -382,17 +402,22 @@ class ControledDrone(DynamicSystem):
         return np.array(xs)
 
 def get_ref_phi(u_x: Number, u_y: Number, psi:Number, f: Number, mass:Number) -> np.float64:
-    cpsi = np.cos(psi)
-    spsi = np.sin(psi)
-    ref_phi = np.arcsin((mass/f)*(spsi*u_x - cpsi*u_y))
+    cpsi = anp.cos(psi)
+    spsi = anp.sin(psi)
+    ref_phi = anp.arcsin((mass/f)*(spsi*u_x - cpsi*u_y))
     return ref_phi
 
 def get_ref_theta(u_x: Number, u_y: Number, psi:Number, ref_phi: Number, f: Number, mass:Number) -> np.float64:
-    cpsi = np.cos(psi)
-    spsi = np.sin(psi)
-    cphi = np.cos(ref_phi)
-    ref_theta = np.arcsin((1/cphi)*(mass/f)*(cpsi*u_x + spsi*u_y))
+    cpsi = anp.cos(psi)
+    spsi = anp.sin(psi)
+    cphi = anp.cos(ref_phi)
+    ref_theta = anp.arcsin((1/cphi)*(mass/f)*(cpsi*u_x + spsi*u_y))
     return ref_theta
+
+get_ref_dphi = egrad(get_ref_phi)
+get_ref_ddphi = egrad(get_ref_dphi)
+get_ref_dtheta = egrad(get_ref_theta)
+get_ref_ddtheta = egrad(get_ref_dtheta)
 
 def get_refs(u_x: Number, u_y: Number, psi: Number, f: Number, mass: Number) -> Tuple[Number, Number]:
     rpsi_inv = get_2d_rot_inv_matrix(psi)
