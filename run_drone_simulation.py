@@ -64,7 +64,7 @@ controller_kwargs = dict(
     jy=1,
     jz=1,
     log_internals=False,
-    direction_ctrl_strat='proportional'
+    direction_ctrl_strat='step'
 )
 
 drone_kwargs = dict(
@@ -80,7 +80,7 @@ filename = f'drone_sim_out_{controller_kwargs["direction_ctrl_strat"]}.csv'
 controller = drone_models.DroneController(**controller_kwargs)
 drone = drone_models.Drone(**drone_kwargs)
 controled_drone = drone_models.ControledDrone(controller, drone)
-res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, max_step=1e-2)
+res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, method='RK45', max_step=1e-3, rtol=1e-2)
 
 print(f'Simulation outputted status {res.status}. "{res.message}"')
 

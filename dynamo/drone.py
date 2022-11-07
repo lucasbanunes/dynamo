@@ -243,6 +243,20 @@ class DroneController(Controller):
             xs.e_dtheta = xs.ref_dtheta-xs.dtheta
             xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
         
+        elif self.direction_ctrl_strat == 'sin':
+            xs.ref_phi = np.sin(3*t)
+            xs.ref_dphi = 3*np.cos(3*t)
+            xs.ref_ddphi = -9*np.sin(3*t)
+            xs.e_phi = xs.ref_phi-xs.phi
+            xs.e_dphi = xs.ref_dphi-xs.dphi
+            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
+            xs.ref_theta = np.sin(3*t)
+            xs.ref_dtheta = 3*np.cos(3*t)
+            xs.ref_ddtheta = -9*np.sin(3*t)
+            xs.e_theta = xs.ref_theta-xs.theta
+            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
+            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
+        
         elif self.direction_ctrl_strat == 'proportional':
             xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
             xs.e_phi = xs.ref_phi-xs.phi
