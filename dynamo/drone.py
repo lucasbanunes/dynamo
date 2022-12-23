@@ -37,6 +37,10 @@ class DroneStates(Bunch):
             y = state_vector[8], dy = state_vector[9],
             z = state_vector[10], dz = state_vector[11],
             state_vector=state_vector)
+    
+    def __repr__(self):
+        obj_repr = '\n'.join([f'{key}: {value}' for key, value in self.__dict__.items()])
+        return obj_repr
 
 class ZFbLinearizationCtrl(FbLinearizationCtrl):
 
@@ -66,7 +70,7 @@ class DroneController(Controller):
         ref_psi: Callable[[Number],Number], ref_dpsi: Callable[[Number],Number], ref_ddpsi: Callable[[Number],Number], 
         kp_x: Number, kd_x: Number, kp_y: Number, kd_y: Number, kp_z: Number, kd_z: Number, 
         kp_phi:Number, kd_phi:Number, kp_theta:Number, kd_theta:Number, kp_psi:Number, kd_psi:Number,
-        A: ArrayLike, jx: Number, jy: Number, jz: Number,
+        A: ArrayLike, jx: Number, jy: Number, jz: Number, theta_sat: Number, phi_sat: Number,
         g: Number, mass: Number, log_internals:bool=False,
         direction_ctrl_strat='proportional'):
         """
@@ -189,6 +193,11 @@ class DroneController(Controller):
         is_numeric(jz)
         self.jz = np.float64(jz)
 
+        is_numeric(theta_sat)
+        self.theta_sat = np.float64(theta_sat)
+        is_numeric(phi_sat)
+        self.phi_sat = np.float64(phi_sat)
+
         # Configs
         is_instance(log_internals, bool)
         self.log_internals = log_internals
@@ -244,44 +253,45 @@ class DroneController(Controller):
             xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
         
         elif self.direction_ctrl_strat == 'sin':
-            xs.ref_phi = np.sin(3*t)
-            xs.ref_dphi = 3*np.cos(3*t)
-            xs.ref_ddphi = -9*np.sin(3*t)
+            ws = 0.06
+            xs.ref_phi = np.sin(ws*t)
+            xs.ref_dphi = ws*np.cos(ws*t)
+            xs.ref_ddphi = -(ws**2)*np.sin(ws*t)
             xs.e_phi = xs.ref_phi-xs.phi
             xs.e_dphi = xs.ref_dphi-xs.dphi
             xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
-            xs.ref_theta = np.sin(3*t)
-            xs.ref_dtheta = 3*np.cos(3*t)
-            xs.ref_ddtheta = -9*np.sin(3*t)
+            xs.ref_theta = np.sin(ws*t)
+            xs.ref_dtheta = ws*np.cos(ws*t)
+            xs.ref_ddtheta = -(ws**2)*np.sin(ws*t)
             xs.e_theta = xs.ref_theta-xs.theta
             xs.e_dtheta = xs.ref_dtheta-xs.dtheta
             xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
         
         elif self.direction_ctrl_strat == 'proportional':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
             xs.e_phi = xs.ref_phi-xs.phi
             xs.u_phi = self.kp_phi*xs.e_phi
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
             xs.e_theta = xs.ref_theta-xs.theta
             xs.u_theta = self.kp_theta*xs.e_theta
         
         elif self.direction_ctrl_strat == 'almost_derivative':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
             xs.e_phi = xs.ref_phi-xs.phi
             xs.u_phi = self.kp_phi*xs.e_phi + self.kd_theta*xs.dphi
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
             xs.e_theta = xs.ref_theta-xs.theta
-            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.dtheta
+            xs.u_theta = self.kp_theta*xs.e_theta - self.kd_theta*xs.dtheta
         
         elif self.direction_ctrl_strat == 'autograd':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
+            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
             xs.ref_dphi = get_ref_dphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
             xs.ref_ddphi = get_ref_ddphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
             xs.e_phi = xs.ref_phi-xs.phi
             xs.e_dphi = xs.ref_dphi-xs.dphi
             xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
 
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
+            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
             xs.ref_dtheta = get_ref_dtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
             xs.ref_ddtheta = get_ref_ddtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
             xs.e_theta = xs.ref_theta-xs.theta
@@ -360,8 +370,8 @@ class Drone(DynamicSystem):
         self.A = np.array(A, dtype=np.float64)
     
     def dx(self, t: Number, xs: DroneStates) -> np.ndarray:
-        f, m_x, m_y, m_z =  np.dot(self.A, xs.fi)
-        # f, m_x, m_y, m_z = xs.f, xs.m_x, xs.m_y, xs.m_z
+        # f, m_x, m_y, m_z =  np.dot(self.A, xs.fi)
+        f, m_x, m_y, m_z = xs.f, xs.m_x, xs.m_y, xs.m_z
         f_over_m = f/self.mass
         phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs.state_vector
         sphi = np.sin(phi)
@@ -415,17 +425,21 @@ class ControledDrone(DynamicSystem):
     def output(self, t, xs):
         return np.array(xs)
 
-def get_ref_phi(u_x: Number, u_y: Number, psi:Number, f: Number, mass:Number) -> np.float64:
+def get_ref_phi(u_x: Number, u_y: Number, psi:Number, f: Number, mass:Number, sat: Number) -> np.float64:
     cpsi = anp.cos(psi)
     spsi = anp.sin(psi)
-    ref_phi = anp.arcsin((mass/f)*(spsi*u_x - cpsi*u_y))
+    real_input = (mass/f)*(spsi*u_x - cpsi*u_y)
+    sat_input = np.arcsin(np.sin(sat))
+    ref_phi = anp.arcsin(real_input)
     return ref_phi
 
-def get_ref_theta(u_x: Number, u_y: Number, psi:Number, ref_phi: Number, f: Number, mass:Number) -> np.float64:
+def get_ref_theta(u_x: Number, u_y: Number, psi:Number, ref_phi: Number, f: Number, mass:Number, sat: Number) -> np.float64:
     cpsi = anp.cos(psi)
     spsi = anp.sin(psi)
     cphi = anp.cos(ref_phi)
-    ref_theta = anp.arcsin((1/cphi)*(mass/f)*(cpsi*u_x + spsi*u_y))
+    real_input = (1/cphi)*(mass/f)*(cpsi*u_x + spsi*u_y)
+    sat_input = np.arcsin(np.sin(sat))
+    ref_theta = anp.arcsin(real_input)
     return ref_theta
 
 get_ref_dphi = egrad(get_ref_phi)

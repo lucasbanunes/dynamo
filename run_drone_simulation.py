@@ -7,7 +7,7 @@ from datetime import datetime
 
 gravity = 10
 drone_mass = 1
-time_range = (0,60)     # Seconds
+time_range = (0,500)     # Seconds
 phi0 = 0.01
 dphi0 = 0
 theta0 = 0.01
@@ -31,40 +31,49 @@ A = np.array([
     [-d, 0, d, 0],
     ctau*s,
 ], dtype=np.float64)
+psifactor = 1e-1
+zfactor = 1e-1
+phifactor = 1e-1
+thetafactor = 1e-1
+xfactor = 1e-4
+yfactor = 1e-4
 
+ws = 0.1
 controller_kwargs = dict(
-    ref_x = lambda t: t**0,
-    ref_dx = lambda t: t-t,
-    ref_ddx = lambda t: t-t,
-    ref_y = lambda t: t**0,
-    ref_dy = lambda t: t-t,
-    ref_ddy = lambda t: t-t,
+    ref_x = lambda t: np.sin(ws*t),
+    ref_dx = lambda t: ws*np.cos(ws*t),
+    ref_ddx = lambda t: -(ws**2)*np.sin(ws*t),
+    ref_y = lambda t: np.sin(ws*t),
+    ref_dy = lambda t: ws*np.cos(ws*t),
+    ref_ddy = lambda t: -(ws**2)*np.sin(ws*t),
     ref_z = lambda t: t**0,
     ref_dz = lambda t: t-t,
     ref_ddz = lambda t: t-t,
     ref_psi = lambda t: t-t,
     ref_dpsi = lambda t: t-t,
     ref_ddpsi = lambda t: t-t,
-    kp_x = 1,
-    kd_x= 1,
-    kp_y = 1,
-    kd_y= 1,
-    kp_z = 3,
-    kd_z= 3,
-    kp_phi = 1,
-    kd_phi = 1,
-    kp_theta = 1,
-    kd_theta = 1,
-    kp_psi = 1,
-    kd_psi = 1,
+    kp_x = 40*xfactor,
+    kd_x = 1000*xfactor,
+    kp_y = 40*yfactor,
+    kd_y = 1000*yfactor,
+    kp_z = 2*zfactor,
+    kd_z = 1*zfactor,
+    kp_phi = 4*phifactor,
+    kd_phi = 10*phifactor,
+    kp_theta = 4*thetafactor,
+    kd_theta = 10*thetafactor,
+    kp_psi = 2*psifactor,
+    kd_psi = 1*psifactor,
     g = gravity,
     mass = drone_mass,
+    theta_sat = np.deg2rad(15),
+    phi_sat = np.deg2rad(15),
     A = A,
-    jx=1,
-    jy=1,
-    jz=1,
-    log_internals=False,
-    direction_ctrl_strat='step'
+    jx = 1,
+    jy = 1,
+    jz = 1,
+    log_internals = False,
+    direction_ctrl_strat = 'almost_derivative'
 )
 
 drone_kwargs = dict(
@@ -80,7 +89,7 @@ filename = f'drone_sim_out_{controller_kwargs["direction_ctrl_strat"]}.csv'
 controller = drone_models.DroneController(**controller_kwargs)
 drone = drone_models.Drone(**drone_kwargs)
 controled_drone = drone_models.ControledDrone(controller, drone)
-res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, method='RK45', max_step=1e-3, rtol=1e-2)
+res = solve_ivp(controled_drone, t_span=time_range, y0=initial_states, method='RK45')
 
 print(f'Simulation outputted status {res.status}. "{res.message}"')
 
