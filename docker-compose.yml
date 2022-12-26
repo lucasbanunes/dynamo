@@ -1,0 +1,13 @@
+version: '3'
+services:
+  dynamo:    
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: lucasbanunes/dynamo
+    container_name: dynamo
+    tty: true
+    volumes:
+      - ./:/workspace/dynamo
+    ports:
+      - "8888:8888"
