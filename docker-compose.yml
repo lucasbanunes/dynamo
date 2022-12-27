@@ -8,6 +8,6 @@ services:
     container_name: dynamo
     tty: true
     volumes:
-      - ./:/workspace/dynamo
+      - ./:/root/dynamo
     ports:
       - "8888:8888"

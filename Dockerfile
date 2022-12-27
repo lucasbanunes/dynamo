@@ -7,5 +7,5 @@ ENV jupyter_port=${default_jupyter_port}
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip
 RUN pip install -r /tmp/requirements.txt
-WORKDIR /workspace
+WORKDIR /root
 CMD jupyter lab --port ${jupyter_port} --no-browser --allow-root --ip 0.0.0.0 --NotebookApp.token='' --NotebookApp.password=''
