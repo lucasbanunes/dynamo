@@ -1,340 +1,197 @@
 import numpy as np
-import pandas as pd
-from numpy.typing import ArrayLike
-from dynamo.controllers import get_ctrl_from_config, FbLinearizationCtrl, Controller, CtrlLike
-from dynamo.models import DynamicSystem
-from dynamo.utils import is_callable, is_numeric, is_instance
-from dynamo.mechanics import get_2d_rot_inv_matrix
-# from dynamo.typing import CtrlLike
-from typing import Callable, Union, Dict, Any, Tuple
+from numpy.typing import ArrayLike, NDArray
+from collections.abc import Mapping
+from typing import Any, Tuple, Self, Iterable
 from numbers import Number
-from autograd import elementwise_grad as egrad
-import autograd.numpy as anp
-from collections import defaultdict
+from dynamo.models import DynamicSystem
+from dynamo.utils import is_numeric
 from dynamo.utils import Bunch
+from dynamo.signal import TimeSignal
+from dynamo.controllers import (
+    FbLinearizationCtrl,
+    Controller,
+    CtrlLike
+)
 
-states_names = ['phi', 'dphi', 'theta', 'dtheta', 'psi', 'dpsi', 'x', 'dx', 'y', 'dy', 'z', 'dz']
-states_idxs = np.arange(len(states_names))
-names_idxs = {key: value for key, value in zip(states_names, states_idxs)}
+STATES_NAMES = [
+    'phi',
+    'dphi',
+    'theta',
+    'dtheta',
+    'psi',
+    'dpsi',
+    'x',
+    'dx',
+    'y',
+    'dy',
+    'z',
+    'dz'
+]
 
-class DroneStates(Bunch):
 
-    def __init__(self, state_vector: ArrayLike):
-        
+class DroneStates(Mapping):
+
+    __slots__ = STATES_NAMES
+
+    def __init__(self, state_vector: ArrayLike[np.floating]) -> Self:
         state_vector = np.array(state_vector)
-        if state_vector.ndim == 1 and len(state_vector) != 12:
-            raise ValueError(f'The state vector should have 12 elements but len was {len(state_vector)}')
-        elif state_vector.ndim == 2 and state_vector.shape[0] != 12:
-            raise ValueError(f'The state vector should have shape[1] == 12 elements but its shape was {state_vector.shape}')
-        elif state_vector.ndim > 2:
-            raise ValueError(f'state_vector should have 2 dims at max but it had shape {state_vector.shape}')
+        for name, value in zip(STATES_NAMES, state_vector):
+            self.__dict__[name] = value
+        self.vector = state_vector
 
-        super().__init__(
-            phi = state_vector[0], dphi = state_vector[1],
-            theta = state_vector[2], dtheta = state_vector[3],
-            psi = state_vector[4], dpsi = state_vector[5],
-            x = state_vector[6], dx = state_vector[7],
-            y = state_vector[8], dy = state_vector[9],
-            z = state_vector[10], dz = state_vector[11],
-            state_vector=state_vector)
-    
-    def __repr__(self):
-        obj_repr = '\n'.join([f'{key}: {value}' for key, value in self.__dict__.items()])
-        return obj_repr
+    def __repr__(self) -> str:
+        name_values = [
+            f"{name}={value}"
+            for name, value in self.items()
+            if name != 'vector'
+        ]
+        repr_str = ",".join(name_values)
+        return repr_str
+
+    def __getitem__(self, idx: str) -> np.floating:
+        return self.__dict__[idx]
+
+    def __len__(self) -> int:
+        return len(self.vector)
+
+    def __iter__(self) -> NDArray[np.floating]:
+        return self.vector
+
+    def items(self) -> Iterable:
+        return self.__dict__.items()
+
 
 class ZFbLinearizationCtrl(FbLinearizationCtrl):
 
-    def __init__(self, gains: ArrayLike, controller: CtrlLike, g: Number, mass: Number):
-        super().__init__(gains, controller)
+    def __init__(self, controller: CtrlLike, g: Number, mass: Number) -> Self:
+        self.g = np.float64(g)
+        self.mass = np.float64(mass)
+        super().__init__(controller)
 
-    def linearize(self, t: Number, u: np.ndarray, input_x: ArrayLike, x: ArrayLike, refs: ArrayLike, **kwargs) -> Number:
-        phi = x[names_idxs['phi']]
-        theta = x[names_idxs['theta']]
-        output = (u+self.g)*self.mass/(np.cos(phi)*np.cos(theta))
+    def linearize(self, t: Number, ctrl_out: Any, phi: Number, theta: Number,
+                  *args, **kwargs) -> Number:
+        output = (ctrl_out+self.g)*self.mass/(np.cos(phi)*np.cos(theta))
         return output
+
 
 class PsiFbLinearizationCtrl(FbLinearizationCtrl):
 
-    def __init__(self, gains: ArrayLike, controller: CtrlLike, jz: Number):
-        super().__init__(gains, controller)
-    
-    def linearize(self, t: Number, u: np.ndarray, input_x: ArrayLike, x: ArrayLike, refs: ArrayLike, **kwargs) -> Number:
-        output = u*self.jz
-        return output
+    def __init__(self, controller: CtrlLike, jz: Number) -> Self:
+        self.jz = np.float64(jz)
+        super().__init__(controller)
+
+    def linearize(self, t: Number, ctrl_out: Any, xs: DroneStates) -> Number:
+        y = ctrl_out*self.jz
+        return y
+
 
 class DroneController(Controller):
 
-    def __init__(self, ref_x: Callable[[Number],Number], ref_dx: Callable[[Number],Number], ref_ddx: Callable[[Number],Number],
-        ref_y: Callable[[Number],Number], ref_dy: Callable[[Number],Number], ref_ddy: Callable[[Number],Number], 
-        ref_z: Callable[[Number],Number], ref_dz: Callable[[Number],Number], ref_ddz: Callable[[Number],Number], 
-        ref_psi: Callable[[Number],Number], ref_dpsi: Callable[[Number],Number], ref_ddpsi: Callable[[Number],Number], 
-        kp_x: Number, kd_x: Number, kp_y: Number, kd_y: Number, kp_z: Number, kd_z: Number, 
-        kp_phi:Number, kd_phi:Number, kp_theta:Number, kd_theta:Number, kp_psi:Number, kd_psi:Number,
-        A: ArrayLike, jx: Number, jy: Number, jz: Number, theta_sat: Number, phi_sat: Number,
-        g: Number, mass: Number, log_internals:bool=False,
-        direction_ctrl_strat='proportional'):
-        """
-        Parameters
-        ------------
-        ref_x: callable
-            Callable that recieves time and returns desired x value
-        ref_y: callable
-            Callable that recieves time and returns desired y value
-        ref_z: callable
-            Callable that recieves time and returns desired z value
-        ref_dz: callable
-            Callable that recieves time and returns desired dz value
-        ref_ddz: callable
-            Callable that recieves time and returns desired ddz value
-        ref_psi: callable
-            Callable that recieves time and returns desired psi value
-        ref_dpsi: callable
-            Callable that recieves time and returns desired dpsi value
-        ref_ddpsi: callable
-            Callable that recieves time and returns desired ddpsi value
-        kp_z: Number
-            Proportional gain for z control
-        kd_z: Number
-            Derivative gain for z control
-        kp_phi: Number
-            Proportional gain for z control
-        kd_phi: Number
-            Derivative gain for z control
-        kp_theta: Number
-            Proportional gain for z control
-        kd_theta: Number
-            Derivative gain for z control
-        kp_psi: Number
-            Proportional gain for z control
-        kd_psi: Number
-            Derivative gain for z control
-        g: Number
-            Gravity
-        mass: Number
-            Drone mass
-        A: Array like
-            Square matrix for computing per motor thurst
-        jx: Number
-            Drone x inertia
-        jy: Numver
-            Drone y inertia
-        jz: Number
-            Drone z inertia
-        log_internals: bool
-            If true logs the internal variable values each time a output is computed by the controller
-        """
+    drone_states = STATES_NAMES
 
-        # References
-        is_callable(ref_x)
-        self.ref_x = ref_x
-        is_callable(ref_dx)
-        self.ref_dx = ref_dx
-        is_callable(ref_ddx)
-        self.ref_ddx = ref_ddx
-        is_callable(ref_y)
-        self.ref_y = ref_y
-        is_callable(ref_dy)
-        self.ref_dy = ref_dy
-        is_callable(ref_ddy)
-        self.ref_ddy = ref_ddy
-        is_callable(ref_z)
-        self.ref_z = ref_z
-        is_callable(ref_dz)
-        self.ref_dz = ref_dz
-        is_callable(ref_ddz)
-        self.ref_ddz = ref_ddz
-        is_callable(ref_psi)
-        self.ref_psi = ref_psi
-        is_callable(ref_dpsi)
-        self.ref_dpsi = ref_dpsi
-        is_callable(ref_ddpsi)
-        self.ref_ddpsi = ref_ddpsi
-        
-        # Gains
-        is_numeric(kp_x)
-        self.kp_x = np.float64(kp_x)
-        is_numeric(kd_x)
-        self.kd_x = np.float64(kd_x)
-        is_numeric(kp_y)
-        self.kp_y = np.float64(kp_y)
-        is_numeric(kd_y)
-        self.kd_y = np.float64(kd_y)
-        is_numeric(kp_z)
-        self.kp_z = np.float64(kp_z)
-        is_numeric(kd_z)
-        self.kd_z = np.float64(kd_z)
-        is_numeric(kp_phi)
-        self.kp_phi = np.float64(kp_phi)
-        is_numeric(kd_phi)
-        self.kd_phi = np.float64(kd_phi)
-        is_numeric(kp_phi)
-        self.kp_phi = np.float64(kp_phi)
-        is_numeric(kd_phi)
-        self.kd_phi = np.float64(kd_phi)
-        is_numeric(kp_theta)
-        self.kp_theta = np.float64(kp_theta)
-        is_numeric(kd_theta)
-        self.kd_theta = np.float64(kd_theta)
-        is_numeric(kp_psi)
-        self.kp_psi = np.float64(kp_psi)
-        is_numeric(kd_psi)
-        self.kd_psi = np.float64(kd_psi)
-        
-        is_numeric(g)
-        self.g = np.float64(g)
-        is_numeric(mass)
+    def __init__(self, refs: TimeSignal,
+                 mass: Number, jx: Number, jy: Number, jz: Number,
+                 A: ArrayLike[np.floating],
+                 x_ctrl: CtrlLike, y_ctrl: CtrlLike, z_ctrl: CtrlLike,
+                 phi_ctrl: CtrlLike, theta_ctrl: CtrlLike, psi_ctrl: CtrlLike
+                 ) -> Self:
+
+        self.refs = refs
+        self.x_ctrl = x_ctrl
+        self.y_ctrl = y_ctrl
+        self.z_ctrl = z_ctrl
+        self.phi_ctrl = phi_ctrl
+        self.psi_ctrl = psi_ctrl
+        self.theta_ctrl = theta_ctrl
         self.mass = np.float64(mass)
-        A = np.array(A, dtype=np.float64)
-        self.Ainv = np.linalg.inv(A)
-        is_numeric(jx)
         self.jx = np.float64(jx)
-        is_numeric(jy)
         self.jy = np.float64(jy)
-        is_numeric(jz)
         self.jz = np.float64(jz)
+        self.A = np.array(A, dtype=np.float64)
+        self.Ainv = np.linalg.inv(self.Ainv)
 
-        is_numeric(theta_sat)
-        self.theta_sat = np.float64(theta_sat)
-        is_numeric(phi_sat)
-        self.phi_sat = np.float64(phi_sat)
+    def output(self, t: Number, state_vector: ArrayLike) -> DroneStates:
 
-        # Configs
-        is_instance(log_internals, bool)
-        self.log_internals = log_internals
-        self.internals = defaultdict(list)
-        self.direction_ctrl_strat = str(direction_ctrl_strat)
-    
-    def compute(self, t: Number, state_vector: ArrayLike) -> Union[np.ndarray, dict]:
-        # phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs
-        
-        xs = DroneStates(state_vector)
+        states = DroneStates(state_vector)
+        out = Bunch()
 
-        xs.ref_z = self.ref_z(t)
-        xs.ref_dz = self.ref_dz(t)
-        xs.ref_ddz = self.ref_ddz(t)
-        xs.ref_x = self.ref_x(t)
-        xs.ref_dx = self.ref_dx(t)
-        xs.ref_ddx = self.ref_ddx(t)
-        xs.ref_y = self.ref_y(t)
-        xs.ref_dy = self.ref_dy(t)
-        xs.ref_ddy = self.ref_ddy(t)
-        xs.ref_psi = self.ref_psi(t)
-        xs.ref_dpsi = self.ref_dpsi(t)
-        xs.ref_ddpsi = self.ref_ddpsi(t)
+        out.ref_x = self.refs.x(t)
+        out.ref_dx = self.refs.dx(t)
+        out.ref_ddx = self.refs.ddx(t)
+        out.ref_y = self.refs.y(t)
+        out.ref_dy = self.refs.dy(t)
+        out.ref_ddy = self.refs.ddy(t)
+        out.ref_z = self.refs.z(t)
+        out.ref_dz = self.refs.dz(t)
+        out.ref_ddz = self.refs.ddz(t)
+        out.ref_psi = self.refs.psi(t)
+        out.ref_dpsi = self.refs.dpsi(t)
+        out.ref_ddpsi = self.refs.ddpsi(t)
 
         # Z control
-        xs.e_z = xs.ref_z - xs.z
-        xs.de_z = xs.ref_dz - xs.dz
-        xs.u_z = self.kp_z*xs.e_z + self.kd_z*xs.de_z + xs.ref_ddz
-        xs.f = (xs.u_z+self.g)*self.mass/(np.cos(xs.phi)*np.cos(xs.theta))
+        out.e_z = out.ref_z - out.z
+        out.de_z = out.ref_dz - out.dz
+        out.f, out.u_z = self.z_ctrl.output(t, e=out.e_z, de=out.de_z,
+                                            ddref=out.ref_ddz, **states)
 
         # X control
-        xs.e_x = xs.ref_x - xs.x
-        xs.e_dx = xs.ref_dx - xs.dx
-        xs.u_x = self.kp_x*xs.e_x + self.kd_x*xs.e_dx + xs.ref_ddx
+        out.e_x = out.ref_x - out.x
+        out.e_dx = out.ref_dx - out.dx
+        out.u_x = self.x_ctrl.output(t, e=out.e_x, de=out.de_x,
+                                     ddref=out.ref_ddx, **states)
 
         # Y control
-        xs.e_y = xs.ref_y - xs.y
-        xs.e_dy = xs.ref_dy - xs.dy
-        xs.u_y = self.kp_y*xs.e_y + self.kd_y*xs.e_dy + xs.ref_ddy
+        out.e_y = out.ref_y - out.y
+        out.e_dy = out.ref_dy - out.dy
+        out.u_y = self.y_ctrl.output(t, e=out.e_y, de=out.de_y,
+                                     ddref=out.ref_ddy, **states)
 
-        if self.direction_ctrl_strat == 'step':
-            xs.ref_phi = np.full(shape=xs.phi.shape, fill_value=np.pi/4)
-            xs.ref_dphi = np.full(shape=xs.phi.shape, fill_value=0)
-            xs.ref_ddphi = np.full(shape=xs.phi.shape, fill_value=0)
-            xs.e_phi = xs.ref_phi-xs.phi
-            xs.e_dphi = xs.ref_dphi-xs.dphi
-            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
-            xs.ref_theta = np.full(shape=xs.theta.shape, fill_value=np.pi/4)
-            xs.ref_dtheta = np.full(shape=xs.theta.shape, fill_value=0)
-            xs.ref_ddtheta = np.full(shape=xs.theta.shape, fill_value=0)
-            xs.e_theta = xs.ref_theta-xs.theta
-            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
-            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
-        
-        elif self.direction_ctrl_strat == 'sin':
-            ws = 0.06
-            xs.ref_phi = np.sin(ws*t)
-            xs.ref_dphi = ws*np.cos(ws*t)
-            xs.ref_ddphi = -(ws**2)*np.sin(ws*t)
-            xs.e_phi = xs.ref_phi-xs.phi
-            xs.e_dphi = xs.ref_dphi-xs.dphi
-            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
-            xs.ref_theta = np.sin(ws*t)
-            xs.ref_dtheta = ws*np.cos(ws*t)
-            xs.ref_ddtheta = -(ws**2)*np.sin(ws*t)
-            xs.e_theta = xs.ref_theta-xs.theta
-            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
-            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
-        
-        elif self.direction_ctrl_strat == 'proportional':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
-            xs.e_phi = xs.ref_phi-xs.phi
-            xs.u_phi = self.kp_phi*xs.e_phi
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
-            xs.e_theta = xs.ref_theta-xs.theta
-            xs.u_theta = self.kp_theta*xs.e_theta
-        
-        elif self.direction_ctrl_strat == 'almost_derivative':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
-            xs.e_phi = xs.ref_phi-xs.phi
-            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_theta*xs.dphi
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
-            xs.e_theta = xs.ref_theta-xs.theta
-            xs.u_theta = self.kp_theta*xs.e_theta - self.kd_theta*xs.dtheta
-        
-        elif self.direction_ctrl_strat == 'autograd':
-            xs.ref_phi = get_ref_phi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass, self.phi_sat)
-            xs.ref_dphi = get_ref_dphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
-            xs.ref_ddphi = get_ref_ddphi(xs.u_x, xs.u_y, xs.psi, xs.f, self.mass)
-            xs.e_phi = xs.ref_phi-xs.phi
-            xs.e_dphi = xs.ref_dphi-xs.dphi
-            xs.u_phi = self.kp_phi*xs.e_phi + self.kd_phi*xs.e_dphi + xs.ref_ddphi
+        # Psi control
+        out.e_psi = out.ref_psi - out.psi
+        out.de_psi = out.ref_dpsi - out.dpsi
+        out.f, out.u_psi = self.psi_ctrl.output(t, e=out.e_psi, de=out.de_psi,
+                                                ddref=out.ref_ddpsi, **states)
 
-            xs.ref_theta = get_ref_theta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass, self.theta_sat)
-            xs.ref_dtheta = get_ref_dtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
-            xs.ref_ddtheta = get_ref_ddtheta(xs.u_x, xs.u_y, xs.psi, xs.ref_phi, xs.f, self.mass)
-            xs.e_theta = xs.ref_theta-xs.theta
-            xs.e_dtheta = xs.ref_dtheta-xs.dtheta
-            xs.u_theta = self.kp_theta*xs.e_theta + self.kd_theta*xs.e_dtheta + xs.ref_ddtheta
-        
-        else:
-            raise ValueError(f'{self.direction_ctrl_strat} value for direction_ctrl_strat is not supported')
+        out.ref_phi, out.ref_theta = self.get_internal_refs(
+            states, out.f, out.u_x, out.u_y
+        )
 
-        # psi control
-        xs.e_psi = xs.ref_psi-xs.psi
-        xs.de_psi = xs.ref_dpsi-xs.dpsi
-        xs.u_psi = self.kp_psi*xs.e_psi+ self.kd_psi*xs.de_psi + xs.ref_ddpsi
+        # Phi control
+        out.e_phi = out.ref_phi - out.phi
+        out.u_phi = self.phi_ctrl.output(t, e=out.e_phi, speed=states.dphi,
+                                         **states)
 
-        xs.m_x = xs.u_phi*self.jx
-        xs.m_y = xs.u_theta*self.jy
-        xs.m_z = xs.u_psi*self.jz
-        if xs.state_vector.ndim == 1:
-            xs.f_M = np.array([xs.f, xs.m_x, xs.m_y, xs.m_z])
-            xs.fi = np.dot(self.Ainv, xs.f_M)
-        elif xs.state_vector.ndim ==2:
-            xs.f_M = np.column_stack((xs.f, xs.m_x, xs.m_y, xs.m_z))
-            xs.fi = np.dot(self.Ainv, xs.f_M.T)
+        # Theta control
+        out.e_theta = out.ref_theta - out.theta
+        out.u_theta = self.theta_ctrl.output(t, e=out.e_theta,
+                                             speed=states.dtheta,
+                                             **states)
 
-        return xs
+        out.m_x = out.u_phi*self.jx
+        out.m_y = out.u_theta*self.jy
+        out.m_z = out.u_psi*self.jz
 
-    def output(self, t: Number, state_vector: ArrayLike) -> np.ndarray:
-        res = self.compute(t, state_vector)
-        return res
-        # if self.log_internals:
-        #     res = self.compute(t, xs, output_only=False)
-        #     self._log_values(**res)
-        #     # fi = np.array([res['f1'], res['f2'], res['f3'], res['f4']])
-        #     fi = np.array([res['f'], res['m_x'], res['m_y'], res['m_z']])
-        # else:
-        #     fi = self.compute(t, xs, output_only=True)
-        
-        # return fi
-    
-    def _log_values(self, **kwargs):
-        for key, value in kwargs.items():
-            self.internals[key].append(value)       
-    
+        if out.state_vector.ndim == 1:
+            out.f_M = np.array([out.f, out.m_x, out.m_y, out.m_z])
+            out.fi = np.dot(self.Ainv, out.f_M)
+        elif out.state_vector.ndim == 2:
+            out.f_M = np.column_stack((out.f, out.m_x, out.m_y, out.m_z))
+            out.fi = np.dot(self.Ainv, out.f_M.T)
+
+        return out
+
+    def get_internal_refs(self, states: DroneStates, f: Number,
+                          u_x: Number, u_y: Number
+                          ) -> Tuple[np.floating, np.floating]:
+        spsi = np.sin(states.psi)
+        cpsi = np.cos(states.psi)
+        mf = self.mass/f
+        ref_phi = -np.arcsin(mf*((cpsi*u_y) - (spsi*u_x)))
+        cphi = np.cos(ref_phi)
+        ref_theta = np.arcsin((1/cphi)*mf*((cpsi*u_x) + (spsi*u_y)))
+        return ref_phi, ref_theta
+
+
 class Drone(DynamicSystem):
 
     def __init__(self, jx: Number, jy: Number, jz: Number,
@@ -370,7 +227,7 @@ class Drone(DynamicSystem):
         self.A = np.array(A, dtype=np.float64)
     
     def dx(self, t: Number, xs: DroneStates) -> np.ndarray:
-        # f, m_x, m_y, m_z =  np.dot(self.A, xs.fi)
+        # f, m_x, m_y, m_z =  np.dot(self.A, out.fi)
         f, m_x, m_y, m_z = xs.f, xs.m_x, xs.m_y, xs.m_z
         f_over_m = f/self.mass
         phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs.state_vector
@@ -394,6 +251,7 @@ class Drone(DynamicSystem):
     def output(self, t, xs):
         return np.array(xs)
 
+
 class Propeller(DynamicSystem):
 
     def __init__(self, c_tau: Number, kt: Number):
@@ -402,58 +260,23 @@ class Propeller(DynamicSystem):
         ------------
         c_tau: Number
             aerodynamic torque constant
-        
+
         kt: Number
             thrust aerodynamic constant
         """
         raise NotImplementedError
-    
+
 
 class ControledDrone(DynamicSystem):
 
     def __init__(self, controller: DroneController, drone: Drone) -> None:
-        is_instance(controller, DroneController)
-        self.controller=controller
-        is_instance(drone, Drone)
-        self.drone=drone
+        self.controller = controller
+        self.drone = drone
 
     def dx(self, t, state_vector) -> np.ndarray:
         xs = self.controller.output(t, state_vector)
         drone_dxs = self.drone(t, xs)
         return drone_dxs
-    
+
     def output(self, t, xs):
         return np.array(xs)
-
-def get_ref_phi(u_x: Number, u_y: Number, psi:Number, f: Number, mass:Number, sat: Number) -> np.float64:
-    cpsi = anp.cos(psi)
-    spsi = anp.sin(psi)
-    real_input = (mass/f)*(spsi*u_x - cpsi*u_y)
-    sat_input = np.arcsin(np.sin(sat))
-    ref_phi = anp.arcsin(real_input)
-    return ref_phi
-
-def get_ref_theta(u_x: Number, u_y: Number, psi:Number, ref_phi: Number, f: Number, mass:Number, sat: Number) -> np.float64:
-    cpsi = anp.cos(psi)
-    spsi = anp.sin(psi)
-    cphi = anp.cos(ref_phi)
-    real_input = (1/cphi)*(mass/f)*(cpsi*u_x + spsi*u_y)
-    sat_input = np.arcsin(np.sin(sat))
-    ref_theta = anp.arcsin(real_input)
-    return ref_theta
-
-get_ref_dphi = egrad(get_ref_phi)
-get_ref_ddphi = egrad(get_ref_dphi)
-get_ref_dtheta = egrad(get_ref_theta)
-get_ref_ddtheta = egrad(get_ref_dtheta)
-
-def get_refs(u_x: Number, u_y: Number, psi: Number, f: Number, mass: Number) -> Tuple[Number, Number]:
-    rpsi_inv = get_2d_rot_inv_matrix(psi)
-    u = np.array([u_x, u_y])
-    mat_prod = (rpsi_inv * u).sum(axis=1)
-    aux = mat_prod*(mass/f)
-    ref_phi = -np.arcsin(aux[1])
-    cphi = np.cos(ref_phi)
-    ref_theta = np.arcsin(aux[0]/cphi)
-    return ref_phi, ref_theta
-    

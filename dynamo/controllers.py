@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from .models import TimeInvariantLinearSystem
 import numpy as np
 from numbers import Number
-from typing import Any, Union, Mapping
+from typing import Any, Union, Mapping, Tuple
 import config
 
 
@@ -77,13 +77,13 @@ class FbLinearizationCtrl(Controller):
         for key, value in kwargs.items():
             self.__dict__[key] = value
 
-    def output(self, t: Number, *args, **kwargs) -> np.ndarray:
+    def output(self, t: Number, *args, **kwargs) -> Tuple[Any, Any]:
         ctrl_out = self.controller.output(t, *args, **kwargs)
-        y = self.linearize(t, ctrl_out)
-        return y
+        y = self.linearize(t, ctrl_out, *args, **kwargs)
+        return y, ctrl_out
 
     @abstractmethod
-    def linearize(self, t: Number, ctrl_out: Any) -> np.ndarray:
+    def linearize(self, t: Number, ctrl_out: Any, *args, **kwargs) -> Any:
         """
         Method that applies the inverse non lineartites from the system to the
         outer controler output in a way that the outer controller sees
@@ -99,6 +99,29 @@ class FbLinearizationCtrl(Controller):
         Returns
         -------
         np.ndarray
-            The output thet applies u to linearized system
+            The output that applies u to linearized system
         """
         raise NotImplementedError
+
+
+class PDController(Controller):
+
+    def __init__(self, kp: Number, kd: Number):
+        self.kp = np.float64(kp)
+        self.kd = np.float(kd)
+
+    def output(self, t: Number, e: Number, de: Number, ddref: Number,
+               *args, **kwargs) -> np.float64:
+        y = self.kp*e + self.kd*de + ddref
+        return y
+
+class PCtrlLowSpeed(Controller):
+
+    def __init__(self, kp: Number, kd: Number):
+        self.kp = np.float64(kp)
+        self.kd = np.float(kd)
+    
+    def output(self, t: Number, e: Number, speed: Number,
+               *args, **kwargs) -> np.float64:
+        y = self.kp*e - self.kd*speed
+        return y

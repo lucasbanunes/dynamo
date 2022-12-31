@@ -1,9 +1,10 @@
 from typing import Any
-from numpy.typing import ArrayLike
+from collections.abc import Mapping
+from numpy.typing import ArrayLike, Iterable
 import numpy as np
 
 
-class Bunch(object):
+class Bunch(Mapping):
     """Container object exposing keys as attributes."""
 
     def __init__(self, **kwargs):
@@ -12,8 +13,25 @@ class Bunch(object):
     def __getitem__(self, key: str):
         return self.__dict__[key]
 
-    def items(self):
+    def __repr__(self) -> str:
+        name_values = [
+            f"{name}={value}"
+            for name, value in self.items()
+        ]
+        repr_str = ",".join(name_values)
+        return repr_str
+
+    def len(self) -> int:
+        return len(self.__dict__)
+
+    def items(self) -> Iterable[str, Any]:
         return self.__dict__.items()
+
+    def keys(self) -> Iterable[str]:
+        return self.__dict__.keys()
+
+    def values(self) -> Iterable[Any]:
+        return self.__dict__.values()
 
 
 class VectorBunch(Bunch):
