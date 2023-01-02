@@ -1,17 +1,9 @@
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from collections.abc import Mapping
-from typing import Any, Tuple, Self, Iterable
 from numbers import Number
-from dynamo.models import DynamicSystem
-from dynamo.utils import is_numeric
-from dynamo.utils import Bunch
+from dynamo.base import Bunch
 from dynamo.signal import TimeSignal
-from dynamo.controllers import (
-    FbLinearizationCtrl,
-    Controller,
-    CtrlLike
-)
+
 
 STATES_NAMES = [
     'phi',
@@ -29,173 +21,147 @@ STATES_NAMES = [
 ]
 
 
-class DroneStates(Mapping):
+class DroneStates(Bunch):
 
-    __slots__ = STATES_NAMES
+    states_names = STATES_NAMES
 
-    def __init__(self, state_vector: ArrayLike[np.floating]) -> Self:
+    def __init__(self, state_vector: ArrayLike):
         state_vector = np.array(state_vector)
-        for name, value in zip(STATES_NAMES, state_vector):
-            self.__dict__[name] = value
-        self.vector = state_vector
-
-    def __repr__(self) -> str:
-        name_values = [
-            f"{name}={value}"
-            for name, value in self.items()
-            if name != 'vector'
-        ]
-        repr_str = ",".join(name_values)
-        return repr_str
-
-    def __getitem__(self, idx: str) -> np.floating:
-        return self.__dict__[idx]
-
-    def __len__(self) -> int:
-        return len(self.vector)
-
-    def __iter__(self) -> NDArray[np.floating]:
-        return self.vector
-
-    def items(self) -> Iterable:
-        return self.__dict__.items()
+        attributes = {"vector": state_vector}
+        for name, value in zip(self.states_names, state_vector):
+            attributes[name] = value
+        super().__init__(**attributes)
 
 
-class ZFbLinearizationCtrl(FbLinearizationCtrl):
+class DroneController():
 
-    def __init__(self, controller: CtrlLike, g: Number, mass: Number) -> Self:
-        self.g = np.float64(g)
-        self.mass = np.float64(mass)
-        super().__init__(controller)
-
-    def linearize(self, t: Number, ctrl_out: Any, phi: Number, theta: Number,
-                  *args, **kwargs) -> Number:
-        output = (ctrl_out+self.g)*self.mass/(np.cos(phi)*np.cos(theta))
-        return output
-
-
-class PsiFbLinearizationCtrl(FbLinearizationCtrl):
-
-    def __init__(self, controller: CtrlLike, jz: Number) -> Self:
-        self.jz = np.float64(jz)
-        super().__init__(controller)
-
-    def linearize(self, t: Number, ctrl_out: Any, xs: DroneStates) -> Number:
-        y = ctrl_out*self.jz
-        return y
-
-
-class DroneController(Controller):
-
-    drone_states = STATES_NAMES
-
-    def __init__(self, refs: TimeSignal,
-                 mass: Number, jx: Number, jy: Number, jz: Number,
-                 A: ArrayLike[np.floating],
-                 x_ctrl: CtrlLike, y_ctrl: CtrlLike, z_ctrl: CtrlLike,
-                 phi_ctrl: CtrlLike, theta_ctrl: CtrlLike, psi_ctrl: CtrlLike
-                 ) -> Self:
+    def __init__(self, refs: TimeSignal, gains: Bunch,
+                 mass: Number, g: Number,
+                 jx: Number, jy: Number, jz: Number,
+                 A: ArrayLike):
 
         self.refs = refs
-        self.x_ctrl = x_ctrl
-        self.y_ctrl = y_ctrl
-        self.z_ctrl = z_ctrl
-        self.phi_ctrl = phi_ctrl
-        self.psi_ctrl = psi_ctrl
-        self.theta_ctrl = theta_ctrl
+        self.gains = gains
         self.mass = np.float64(mass)
+        self.g = np.float64(g)
         self.jx = np.float64(jx)
         self.jy = np.float64(jy)
         self.jz = np.float64(jz)
         self.A = np.array(A, dtype=np.float64)
-        self.Ainv = np.linalg.inv(self.Ainv)
+        Ainv = np.linalg.inv(A)
+        self.Ainv = np.linalg.inv(Ainv)
 
-    def output(self, t: Number, state_vector: ArrayLike) -> DroneStates:
+    def output(self, t: Number, data: Bunch) -> Bunch:
 
-        states = DroneStates(state_vector)
-        out = Bunch()
-
-        out.ref_x = self.refs.x(t)
-        out.ref_dx = self.refs.dx(t)
-        out.ref_ddx = self.refs.ddx(t)
-        out.ref_y = self.refs.y(t)
-        out.ref_dy = self.refs.dy(t)
-        out.ref_ddy = self.refs.ddy(t)
-        out.ref_z = self.refs.z(t)
-        out.ref_dz = self.refs.dz(t)
-        out.ref_ddz = self.refs.ddz(t)
-        out.ref_psi = self.refs.psi(t)
-        out.ref_dpsi = self.refs.dpsi(t)
-        out.ref_ddpsi = self.refs.ddpsi(t)
+        data.t = np.float64(t)
+        data.ref_x = self.refs.x(t)
+        data.dref_x = self.refs.dx(t)
+        data.ddref_x = self.refs.ddx(t)
+        data.ref_y = self.refs.y(t)
+        data.dref_y = self.refs.dy(t)
+        data.ddref_y = self.refs.ddy(t)
+        data.ref_z = self.refs.z(t)
+        data.dref_z = self.refs.dz(t)
+        data.ddref_z = self.refs.ddz(t)
+        data.ref_psi = self.refs.psi(t)
+        data.dref_psi = self.refs.dpsi(t)
+        data.ddref_psi = self.refs.ddpsi(t)
 
         # Z control
-        out.e_z = out.ref_z - out.z
-        out.de_z = out.ref_dz - out.dz
-        out.f, out.u_z = self.z_ctrl.output(t, e=out.e_z, de=out.de_z,
-                                            ddref=out.ref_ddz, **states)
+        data.e_z = data.ref_z - data.z
+        data.de_z = data.dref_z - data.dz
+        data.u_z = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
+        )
+        num = (data.u_z+self.g)*self.mass
+        den = np.cos(data.phi)*np.cos(data.theta)
+        data.f = num/den
 
         # X control
-        out.e_x = out.ref_x - out.x
-        out.e_dx = out.ref_dx - out.dx
-        out.u_x = self.x_ctrl.output(t, e=out.e_x, de=out.de_x,
-                                     ddref=out.ref_ddx, **states)
-
-        # Y control
-        out.e_y = out.ref_y - out.y
-        out.e_dy = out.ref_dy - out.dy
-        out.u_y = self.y_ctrl.output(t, e=out.e_y, de=out.de_y,
-                                     ddref=out.ref_ddy, **states)
-
-        # Psi control
-        out.e_psi = out.ref_psi - out.psi
-        out.de_psi = out.ref_dpsi - out.dpsi
-        out.f, out.u_psi = self.psi_ctrl.output(t, e=out.e_psi, de=out.de_psi,
-                                                ddref=out.ref_ddpsi, **states)
-
-        out.ref_phi, out.ref_theta = self.get_internal_refs(
-            states, out.f, out.u_x, out.u_y
+        data.e_x = data.ref_x - data.x
+        data.e_dx = data.dref_x - data.dx
+        data.u_x = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
         )
 
+        # Y control
+        data.e_y = data.ref_y - data.y
+        data.e_dy = data.dref_y - data.dy
+        data.u_y = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
+        )
+
+        # Psi control
+        data.e_psi = data.ref_psi - data.psi
+        data.de_psi = data.dref_psi - data.dpsi
+        data.u_psi = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
+        )
+        data.m_z = data.u_psi*self.jz
+
+        self.add_internal_refs(data)
+
         # Phi control
-        out.e_phi = out.ref_phi - out.phi
-        out.u_phi = self.phi_ctrl.output(t, e=out.e_phi, speed=states.dphi,
-                                         **states)
+        data.e_phi = data.ref_phi - data.phi
+        data.de_phi = data.dref_phi - data.dphi
+        data.u_phi = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
+        )
+        data.m_x = data.u_phi*self.jx
 
         # Theta control
-        out.e_theta = out.ref_theta - out.theta
-        out.u_theta = self.theta_ctrl.output(t, e=out.e_theta,
-                                             speed=states.dtheta,
-                                             **states)
+        data.e_theta = data.ref_theta - data.theta
+        data.de_theta = data.dref_theta - data.dtheta
+        data.u_theta = self.apply_pd_control(
+            e=data.e_z, de=data.de_z, ddref=data.ddref_z,
+            kp=self.gains.kp_z, kd=self.gains.kd_z
+        )
+        data.m_y = data.u_theta*self.jy
 
-        out.m_x = out.u_phi*self.jx
-        out.m_y = out.u_theta*self.jy
-        out.m_z = out.u_psi*self.jz
+        if data.vector.ndim == 1:
+            data.f_M = np.array([data.f, data.m_x, data.m_y, data.m_z])
+            data.fi = np.dot(self.Ainv, data.f_M)
+        elif data.vector.ndim == 2:
+            data.f_M = np.column_stack((data.f, data.m_x, data.m_y, data.m_z))
+            data.fi = np.dot(self.Ainv, data.f_M.T)
 
-        if out.state_vector.ndim == 1:
-            out.f_M = np.array([out.f, out.m_x, out.m_y, out.m_z])
-            out.fi = np.dot(self.Ainv, out.f_M)
-        elif out.state_vector.ndim == 2:
-            out.f_M = np.column_stack((out.f, out.m_x, out.m_y, out.m_z))
-            out.fi = np.dot(self.Ainv, out.f_M.T)
+        return data
 
-        return out
+    def add_internal_refs(self, data: Bunch) -> Bunch:
+        spsi = np.sin(data.psi)
+        cpsi = np.cos(data.psi)
+        mf = self.mass/data.f
+        data.ref_phi = -np.arcsin(mf*((cpsi*data.u_y) - (spsi*data.u_x)))
+        cphi = np.cos(data.ref_phi)
+        data.ref_theta = \
+            np.arcsin((1/cphi)*mf*((cpsi*data.u_x) + (spsi*data.u_y)))
 
-    def get_internal_refs(self, states: DroneStates, f: Number,
-                          u_x: Number, u_y: Number
-                          ) -> Tuple[np.floating, np.floating]:
-        spsi = np.sin(states.psi)
-        cpsi = np.cos(states.psi)
-        mf = self.mass/f
-        ref_phi = -np.arcsin(mf*((cpsi*u_y) - (spsi*u_x)))
-        cphi = np.cos(ref_phi)
-        ref_theta = np.arcsin((1/cphi)*mf*((cpsi*u_x) + (spsi*u_y)))
-        return ref_phi, ref_theta
+        data.dref_phi = np.full(data.ref_phi.shape, 0)
+        data.ddref_phi = np.full(data.ref_phi.shape, 0)
+        data.dref_theta = np.full(data.ref_theta.shape, 0)
+        data.ddref_theta = np.full(data.ref_theta.shape, 0)
+
+        return data
+
+    def apply_pd_control(self,
+                         e: Number,
+                         de: Number,
+                         ddref: Number,
+                         kp: Number,
+                         kd: Number):
+        u = kp*e + kd*de + ddref
+        return u
 
 
-class Drone(DynamicSystem):
+class Drone():
 
     def __init__(self, jx: Number, jy: Number, jz: Number,
-        g: Number, mass: Number, A:ArrayLike):
+                 g: Number, mass: Number, A: ArrayLike):
         """
         Parameters
         ------------
@@ -212,47 +178,37 @@ class Drone(DynamicSystem):
         A: Array like
             Square matrix for computing per motor thurst
         """
-        is_numeric(jx)
-        self.jx = jx
-        is_numeric(jy)
-        self.jy = jy
-        is_numeric(jz)
-        self.jz = jz
-        is_numeric(jx)
-        self.jx = jx
-        is_numeric(g)
-        self.g = g
-        is_numeric(mass)
-        self.mass = mass
+        self.jx = np.float64(jx)
+        self.jy = np.float64(jy)
+        self.jz = np.float64(jz)
+        self.g = np.float64(g)
+        self.mass = np.float64(mass)
         self.A = np.array(A, dtype=np.float64)
-    
-    def dx(self, t: Number, xs: DroneStates) -> np.ndarray:
+
+    def dx(self, t: Number, data: Bunch) -> Bunch:
         # f, m_x, m_y, m_z =  np.dot(self.A, out.fi)
-        f, m_x, m_y, m_z = xs.f, xs.m_x, xs.m_y, xs.m_z
+        f, m_x, m_y, m_z = data.f, data.m_x, data.m_y, data.m_z
         f_over_m = f/self.mass
-        phi, dphi, theta, dtheta, psi, dpsi, x, dx, y, dy, z, dz = xs.state_vector
-        sphi = np.sin(phi)
-        cphi = np.cos(phi)
-        stheta = np.sin(theta)
-        ctheta = np.cos(theta)
-        spsi = np.sin(psi)
-        cpsi = np.cos(psi)
-        
-        ddphi = dtheta*dpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx
-        ddtheta = dphi*dpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy
-        ddpsi = dtheta*dphi*((self.jx-self.jy)/self.jz) +  m_z/self.jz
-        ddx = f_over_m*((spsi*sphi) + (cphi*stheta*cpsi))
-        ddy = f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi))
-        ddz = -self.g+(cphi*ctheta*f_over_m)
+        sphi = np.sin(data.phi)
+        cphi = np.cos(data.phi)
+        stheta = np.sin(data.theta)
+        ctheta = np.cos(data.theta)
+        spsi = np.sin(data.psi)
+        cpsi = np.cos(data.psi)
 
-        dxs = np.array([dphi, ddphi, dtheta, ddtheta, dpsi, ddpsi, dx, ddx, dy, ddy, dz, ddz])
-        return dxs
-
-    def output(self, t, xs):
-        return np.array(xs)
+        dtheta = data.dtheta
+        dpsi = data.dpsi
+        dphi = data.dphi
+        data.ddphi = dtheta*dpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx
+        data.ddtheta = dphi*dpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy
+        data.ddpsi = dtheta*dphi*((self.jx-self.jy)/self.jz) + m_z/self.jz
+        data.ddx = f_over_m*((spsi*sphi) + (cphi*stheta*cpsi))
+        data.ddy = f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi))
+        data.ddz = -self.g+(cphi*ctheta*f_over_m)
+        return data
 
 
-class Propeller(DynamicSystem):
+class Propeller():
 
     def __init__(self, c_tau: Number, kt: Number):
         """
@@ -267,16 +223,36 @@ class Propeller(DynamicSystem):
         raise NotImplementedError
 
 
-class ControledDrone(DynamicSystem):
+class ControledDrone():
 
-    def __init__(self, controller: DroneController, drone: Drone) -> None:
+    def __init__(self, controller: DroneController, drone: Drone):
         self.controller = controller
         self.drone = drone
 
-    def dx(self, t, state_vector) -> np.ndarray:
-        xs = self.controller.output(t, state_vector)
-        drone_dxs = self.drone(t, xs)
-        return drone_dxs
+    def __call__(self, t: Number,
+                 state_vector: NDArray[np.floating]
+                 ) -> NDArray[np.floating]:
+        data = self.output(t, state_vector)
+        simulation_dx = np.array([
+            data.dphi,
+            data.ddphi,
+            data.dtheta,
+            data.ddtheta,
+            data.dpsi,
+            data.ddpsi,
+            data.dx,
+            data.ddx,
+            data.dy,
+            data.ddy,
+            data.dz,
+            data.ddz
+        ], dtype=np.float64)
+        return simulation_dx
 
-    def output(self, t, xs):
-        return np.array(xs)
+    def output(self, t: Number,
+               state_vector: NDArray[np.floating]
+               ) -> NDArray[np.floating]:
+        data = DroneStates(state_vector)
+        data = self.controller.output(t, data)
+        data = self.drone.dx(t, data)
+        return data

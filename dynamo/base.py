@@ -2,6 +2,7 @@ from collections.abc import MutableMapping
 from abc import ABC, abstractmethod
 from typing import Any, Mapping
 from numbers import Number
+import pandas as pd
 
 
 class Bunch(MutableMapping):
@@ -33,6 +34,12 @@ class Bunch(MutableMapping):
 
     def __len__(self):
         return len(self.__dict__)
+
+    def to_frame(self):
+        df = pd.DataFrame()
+        for key, value in self.items():
+            df[key] = value
+        return df
 
 
 class BaseModel(ABC):

@@ -1,53 +1,68 @@
 from importlib import import_module
 from typing import Tuple, List, Any, Dict
 from dynamo.typing import DefaultTypes
-import json
+
+
+def is_config_dict(obj: Any) -> bool:
+    if not isinstance(obj, dict):
+        return False
+
+    try:
+        obj["constructor"]
+        obj["kwargs"]
+        obj["args"]
+    except KeyError:
+        return False
+
+    return True
 
 
 def split_import_name(import_name: str) -> Tuple[str, str]:
     splitted = import_name.split(".")
-    package_name = splitted[0]
-    module_name = ".".join(splitted[1:])
-    return package_name, module_name
+    name = ".".join(splitted[:-1])
+    attribute = splitted[-1]
+    return name, attribute
 
 
-def parse_config_args(config_args: List[DefaultTypes]) -> List[Any]:
+def parse_config_args(config_args: List[DefaultTypes],
+                      parse_inner_objs: bool) -> List[Any]:
     args = list()
     for iarg in config_args:
-        if (type(iarg) is dict):
-            parsed_obj = parse_config_dict(iarg)
+        if is_config_dict(iarg):
+            parsed_obj = parse_config_dict(iarg, parse_inner_objs)
             args.append(parsed_obj)
         else:
             args.append(iarg)
     return args
 
 
-def parse_config_kwargs(config_kwargs: Dict[str, DefaultTypes]) -> List[Any]:
-    kwargs = list()
+def parse_config_kwargs(config_kwargs: Dict[str, DefaultTypes],
+                        parse_inner_objs: bool) -> Dict[str, Any]:
+    kwargs = dict()
     for key, iarg in config_kwargs.items():
-        if (type(iarg) is dict):
-            parsed_obj = parse_config_dict(iarg)
+        if is_config_dict(iarg):
+            parsed_obj = parse_config_dict(iarg, parse_inner_objs)
             kwargs[key] = parsed_obj
         else:
             kwargs[key] = iarg
-    return iarg
+    return kwargs
 
 
-def parse_config_dict(config_str: str, parse_inner_dicts: bool) -> Any:
-    config = json.loads(config_str)
-    constructor_name = config["constructor"]
-    package_name, module_name = split_import_name(constructor_name)
-    constructor = import_module(module_name, package_name)
+def parse_config_dict(config_dict: Dict[str, Any], parse_inner_objs: bool) -> Any:
+    constructor_name = config_dict["constructor"]
+    name, attribute = split_import_name(constructor_name)
+    package = import_module(name)
+    constructor = getattr(package, attribute)
 
-    if parse_inner_dicts:
-        args = parse_config_args(config["args"])
+    if parse_inner_objs:
+        args = parse_config_args(config_dict["args"], parse_inner_objs)
     else:
-        args = config["args"]
+        args = config_dict["args"]
 
-    if parse_inner_dicts:
-        kwargs = parse_config_kwargs(config["kwargs"])
+    if parse_inner_objs:
+        kwargs = parse_config_kwargs(config_dict["kwargs"], parse_inner_objs)
     else:
-        kwargs = config["kwargs"]
+        kwargs = config_dict["kwargs"]
 
     instance = constructor(*args, **kwargs)
     return instance
