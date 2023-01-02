@@ -1,48 +1,7 @@
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable
 from collections.abc import Mapping
-from numpy.typing import ArrayLike
-import numpy as np
-
-
-class Bunch(Mapping):
-    """Container object exposing keys as attributes."""
-
-    def __init__(self, **kwargs):
-        self.__dict__ = kwargs
-
-    def __getitem__(self, key: str):
-        return self.__dict__[key]
-
-    def __repr__(self) -> str:
-        name_values = [
-            f"{name}={value}"
-            for name, value in self.items()
-        ]
-        repr_str = ",".join(name_values)
-        return repr_str
-
-    def len(self) -> int:
-        return len(self.__dict__)
-
-    def items(self) -> Iterable[Tuple[str, Any]]:
-        return self.__dict__.items()
-
-    def keys(self) -> Iterable[str]:
-        return self.__dict__.keys()
-
-    def values(self) -> Iterable[Any]:
-        return self.__dict__.values()
-
-
-class VectorBunch(Bunch):
-    """Bunch object with a numpy array x as an attribute and its
-    individual values accessible via atributes as such:
-        self.x{i+1} = x[i]"""
-
-    def __init__(self, x: ArrayLike):
-        x = np.array(x).flatten()
-        kwargs = {f'x{i+1}': x[i] for i in range(len(x))}
-        super().__init__(x=x, **kwargs)
+from numbers import Number
+from dynamo.typing import DefaultTypes
 
 
 def is_instance(obj: Any, class_: Any, var_name: str = None) -> bool:
@@ -74,3 +33,16 @@ def is_instance(obj: Any, class_: Any, var_name: str = None) -> bool:
             raise TypeError(f"{var_name} can't be {type(obj)}")
         else:
             raise TypeError(f"Object is {type(obj)}")
+
+
+def to_default_type(obj: Any) -> DefaultTypes:
+    if isinstance(obj, Number):
+        casted = float(obj)
+    if isinstance(obj, Mapping):
+        casted = {key: to_default_type(value) for key, value in obj.items()}
+    elif isinstance(obj, Iterable):
+        casted = [to_default_type(value) for value in obj]
+    else:
+        raise ValueError(f"{type(obj)} cannot be casted to default type.")
+
+    return casted
