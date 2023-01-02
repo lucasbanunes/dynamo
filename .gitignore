@@ -134,3 +134,6 @@ plots/
 
 # VSCode
 .vscode/
+
+# Misc
+ignore/
