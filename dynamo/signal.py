@@ -40,7 +40,10 @@ class TimeSignal(Bunch):
             for diff_order in range(self.n_derivatives):
                 d_str = (diff_order+1)*"d"
                 diff_name = f"{d_str}{func_name}"
-                sym_diff = sympy.diff(last_diff, "t")
+                if "Heaviside" in func_str:
+                    sym_diff = sympy.diff("t-t", "t")
+                else:
+                    sym_diff = sympy.diff(last_diff, "t")
                 funcs[diff_name] = sym_diff
                 self[f"sym_{diff_name}"] = str(sym_diff)
                 last_diff = sym_diff
