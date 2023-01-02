@@ -1,9 +1,3 @@
-from typing import TypedDict, Union, List, Dict, Tuple
+from typing import Union, List, Dict, Tuple, Set
 
-DefaultTypes = Union[int, float, str, List, Dict, Tuple]
-
-
-class ConfigDict(TypedDict):
-    constructor: str
-    args: List[DefaultTypes]
-    kwargs: List[str, DefaultTypes]
+DefaultTypes = Union[int, float, str, List, Dict, Tuple, Set]
