@@ -1,10 +1,10 @@
-from collections.abc import Mapping
+from collections.abc import MutableMapping
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Any
+from typing import Iterable, Tuple, Any, Mapping
 from numbers import Number
 
 
-class Bunch(Mapping):
+class Bunch(MutableMapping):
     """Container object exposing keys as attributes."""
 
     def __init__(self, **kwargs):
@@ -12,31 +12,27 @@ class Bunch(Mapping):
             setattr(self, key, value)
 
     def __getitem__(self, key: str) -> Any:
-        value = getattr(self, key)
-        return value
+        return getattr(self, key)
 
     def __setitem__(self, key: str, value: Any):
         setattr(self, key, value)
+
+    def __delitem__(self, key: str):
+        delattr(self, key)
 
     def __repr__(self) -> str:
         name_values = [
             f"{name}={value}"
             for name, value in self.items()
         ]
-        repr_str = ",".join(name_values)
+        repr_str = ", ".join(name_values)
         return repr_str
 
-    def len(self) -> int:
+    def __iter__(self):
+        return iter(self.__dict__)
+
+    def __len__(self):
         return len(self.__dict__)
-
-    def items(self) -> Iterable[Tuple[str, Any]]:
-        return self.__dict__.items()
-
-    def keys(self) -> Iterable[str]:
-        return self.__dict__.keys()
-
-    def values(self) -> Iterable[Any]:
-        return self.__dict__.values()
 
 
 class BaseModel(ABC):
