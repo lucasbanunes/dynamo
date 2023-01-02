@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, Iterable, Tuple
 from collections.abc import Mapping
-from numpy.typing import ArrayLike, Iterable
+from numpy.typing import ArrayLike
 import numpy as np
 
 
@@ -24,7 +24,7 @@ class Bunch(Mapping):
     def len(self) -> int:
         return len(self.__dict__)
 
-    def items(self) -> Iterable[str, Any]:
+    def items(self) -> Iterable[Tuple[str, Any]]:
         return self.__dict__.items()
 
     def keys(self) -> Iterable[str]:
@@ -45,7 +45,7 @@ class VectorBunch(Bunch):
         super().__init__(x=x, **kwargs)
 
 
-def is_instance(obj: Any, class_: Any) -> bool:
+def is_instance(obj: Any, class_: Any, var_name: str = None) -> bool:
     """
     Checks if object is from a specified class. If not, raises an error.
 
@@ -70,4 +70,7 @@ def is_instance(obj: Any, class_: Any) -> bool:
     if isinstance(obj, class_):
         return True
     else:
-        raise TypeError(f'{obj} must be {class_}')
+        if var_name:
+            raise TypeError(f"{var_name} can't be {type(obj)}")
+        else:
+            raise TypeError(f"Object is {type(obj)}")

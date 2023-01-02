@@ -1,45 +1,8 @@
-from abc import abstractmethod, ABC
-from .models import TimeInvariantLinearSystem
+from abc import abstractmethod
 import numpy as np
 from numbers import Number
-from typing import Any, Union, Mapping, Tuple
-import config
-
-
-class Controller(ABC):
-    """
-    The Controller class is an abstract class that represents
-    a control logic that receives one or several inputs and returns an output
-    to a plant.
-    """
-    @abstractmethod
-    def output(self, t: Number, **kwargs) -> np.ndarray:
-        """
-        Method that computes the controller output for a given t time.
-
-        Parameters
-        ----------
-        t : Number
-            Current time
-        **kwargs:
-            Any other desired parameters
-
-        Returns
-        -------
-        np.ndarray
-            Controller output
-        """
-        pass
-
-
-CtrlLike = Union[Controller, Mapping[str, Any]]
-
-
-class LinearController(TimeInvariantLinearSystem, Controller):
-    """
-    LinearController represents the set of controllers that can be
-    represented as a TimeInvariantLinearSystem.
-    """
+from dynamo.base import Controller, Bunch
+from dynamo.utils import is_instance
 
 
 class FbLinearizationCtrl(Controller):
@@ -65,63 +28,34 @@ class FbLinearizationCtrl(Controller):
 
     """
 
-    def __init__(self, controller: CtrlLike, **kwargs):
-        if isinstance(controller, Controller):
-            self.controller = controller
-        elif config.is_obj_config(controller):
-            self.controller = config.get_obj_from_config(controller)
-        else:
-            raise TypeError("controller must be a Controller instance"
-                            " or a object config"
-                            f"Not {type(controller)}")
-        for key, value in kwargs.items():
-            self.__dict__[key] = value
+    def __init__(self, controller: Controller, **kwargs):
+        super().__init__(**kwargs)
+        is_instance(controller, Controller, var_name="controller")
+        super().__init__(**kwargs)
 
-    def output(self, t: Number, *args, **kwargs) -> Tuple[Any, Any]:
-        ctrl_out = self.controller.output(t, *args, **kwargs)
-        y = self.linearize(t, ctrl_out, *args, **kwargs)
-        return y, ctrl_out
+    def get_output(self, t: Number, input_bunch: Bunch) -> Bunch:
+        ctrl_bunch = self.controller.output(t, input_bunch)
+        output_bunch = self.linearize(t, ctrl_bunch)
+        return output_bunch
 
     @abstractmethod
-    def linearize(self, t: Number, ctrl_out: Any, *args, **kwargs) -> Any:
+    def linearize(self, t: Number, input_bunch: Bunch) -> Bunch:
         """
         Method that applies the inverse non lineartites from the system to the
         outer controler output in a way that the outer controller sees
         a linear plant.
-
-        Parameters
-        ----------
-        t : Number
-            The control/simulation time
-        ctrl_out: Any
-            Output from the outer control strategy
-
-        Returns
-        -------
-        np.ndarray
-            The output that applies u to linearized system
         """
         raise NotImplementedError
 
 
 class PDController(Controller):
 
-    def __init__(self, kp: Number, kd: Number):
+    def __init__(self, kp: Number, kd: Number, **kwargs):
         self.kp = np.float64(kp)
         self.kd = np.float(kd)
+        super().__init__(**kwargs)
 
-    def output(self, t: Number, e: Number, de: Number, ddref: Number,
-               *args, **kwargs) -> np.float64:
-        y = self.kp*e + self.kd*de + ddref
-        return y
-
-class PCtrlLowSpeed(Controller):
-
-    def __init__(self, kp: Number, kd: Number):
-        self.kp = np.float64(kp)
-        self.kd = np.float(kd)
-    
-    def output(self, t: Number, e: Number, speed: Number,
-               *args, **kwargs) -> np.float64:
-        y = self.kp*e - self.kd*speed
-        return y
+    def get_output(self, t: Number, input_bunch: Bunch) -> Bunch:
+        data = input_bunch
+        data.y = self.kp*data.e + self.kd*data.de + data.ddref
+        return data
