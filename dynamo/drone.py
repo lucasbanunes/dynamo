@@ -21,6 +21,16 @@ STATES_NAMES = [
 ]
 
 
+@np.vectorize
+def saturated_arcsin(x):
+    if x > 1:
+        return np.pi/2
+    elif x < -1:
+        return -np.pi/2
+    else:
+        return np.arcsin(x)
+
+
 class DroneStates(Bunch):
 
     states_names = STATES_NAMES
@@ -74,13 +84,12 @@ class DroneController():
             e=data.e_z, de=data.de_z, ddref=data.ddref_z,
             kp=self.gains.kp_z, kd=self.gains.kd_z
         )
-        num = (data.u_z+self.g)*self.mass
-        den = np.cos(data.phi)*np.cos(data.theta)
-        data.f = num/den
+        data.kh = np.cos(data.phi)*np.cos(data.theta)
+        data.f = (data.u_z+self.g)*self.mass/data.kh
 
         # X control
         data.e_x = data.ref_x - data.x
-        data.e_dx = data.dref_x - data.dx
+        data.de_x = data.dref_x - data.dx
         data.u_x = self.apply_pd_control(
             e=data.e_z, de=data.de_z, ddref=data.ddref_z,
             kp=self.gains.kp_z, kd=self.gains.kd_z
@@ -88,7 +97,7 @@ class DroneController():
 
         # Y control
         data.e_y = data.ref_y - data.y
-        data.e_dy = data.dref_y - data.dy
+        data.de_y = data.dref_y - data.dy
         data.u_y = self.apply_pd_control(
             e=data.e_z, de=data.de_z, ddref=data.ddref_z,
             kp=self.gains.kp_z, kd=self.gains.kd_z
@@ -136,10 +145,11 @@ class DroneController():
         spsi = np.sin(data.psi)
         cpsi = np.cos(data.psi)
         mf = self.mass/data.f
-        data.ref_phi = -np.arcsin(mf*((cpsi*data.u_y) - (spsi*data.u_x)))
+        data.ref_phi = \
+            -saturated_arcsin(mf*((cpsi*data.u_y) - (spsi*data.u_x)))
         cphi = np.cos(data.ref_phi)
         data.ref_theta = \
-            np.arcsin((1/cphi)*mf*((cpsi*data.u_x) + (spsi*data.u_y)))
+            saturated_arcsin((1/cphi)*mf*((cpsi*data.u_x) + (spsi*data.u_y)))
 
         data.dref_phi = np.full(data.ref_phi.shape, 0)
         data.ddref_phi = np.full(data.ref_phi.shape, 0)
