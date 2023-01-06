@@ -2,134 +2,11 @@ import os
 import json
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import dynamo.drone as drone_models
 from scipy.integrate import solve_ivp
 from datetime import datetime
 from dynamo.config import parse_config_dict
-
-vars_to_plot = ['x', 'y', 'z', 'phi', 'theta', 'psi']
-var_labels = {
-    'x': 'x', 'y': 'y', 'z': 'z',
-    'theta': '\\theta', 'phi': '\\phi', 'psi': '\\psi',
-    'f': 'f', 'm_x': 'm_x', 'm_y': 'm_y', 'm_z': 'm_z'
-}
-
-linearization_inputs = {
-    'x': None,
-    'y': None,
-    'z': 'f',
-    'phi': 'm_x',
-    'theta': 'm_y',
-    'psi': 'm_z'
-}
-
-
-def plot_base_ax(var, sim_out, ax, xlim=None, ylim=None):
-    var_label = var_labels[var]
-    lines = list()
-    lines += ax.plot(sim_out['t'],
-                     sim_out[var],
-                     label=f'${var_label}$',
-                     color='C0')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'u_{var}'],
-                     label=f'${var_label}$',
-                     linestyle='--', color='C1')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'ref_{var}'],
-                     label=f'$r_{var_label}$',
-                     linestyle='--', color='k')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'e_{var}'],
-                     label=f'$e_{var_label}$',
-                     linestyle='--', color='C2')
-    lin_var = linearization_inputs[var]
-    if lin_var:
-        lin_var_label = var_labels[lin_var]
-        twinx = ax.twinx()
-        lines += twinx.plot(sim_out['t'],
-                            sim_out[lin_var],
-                            label=f'${lin_var_label}$',
-                            linestyle='--', color='C3')
-
-    labels = [illine.get_label() for illine in lines]
-    ax.legend(lines, labels)
-    ax.set(xlim=xlim, ylim=ylim)
-    ax.grid()
-    return ax
-
-
-def plot_dax(var, sim_out, ax, xlim=None, ylim=None):
-    var_label = var_labels[var]
-    lines = list()
-    lines += ax.plot(sim_out['t'],
-                     sim_out[var],
-                     label=f'$\dot{{{var_label}}}$',
-                     color='C0')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'dref_{var}'],
-                     label=f'$\dot{{r_{var_label}}}$',
-                     linestyle='--', color='k')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'de_{var}'],
-                     label=f'$\dot{{e_{var_label}}}$',
-                     linestyle='--', color='C2')
-    labels = [illine.get_label() for illine in lines]
-    ax.legend(lines, labels)
-    ax.set(xlim=xlim, ylim=ylim)
-    ax.grid()
-    return ax
-
-
-def plot_ddax(var, sim_out, ax, xlim=None, ylim=None):
-    var_label = var_labels[var]
-    lines = list()
-    lines += ax.plot(sim_out['t'],
-                     sim_out[var],
-                     label=f'$\ddot{{{var_label}}}$',
-                     color='C0')
-    lines += ax.plot(sim_out['t'],
-                     sim_out[f'ddref_{var}'],
-                     label=f'$\ddot{{r_{var_label}}}$',
-                     linestyle='--', color='k')
-    labels = [illine.get_label() for illine in lines]
-    ax.legend(lines, labels)
-    ax.set(xlim=xlim, ylim=ylim)
-    ax.grid()
-    return ax
-
-
-def time_plot(variable: str,
-              sim_out: pd.DataFrame,
-              filename: str = None,
-              xlim=None,
-              ylim=None):
-
-    fig, axes = plt.subplots(3, 1, figsize=(19.20, 10.80))
-    base_ax, dax, ddax = axes
-    plot_base_ax(variable, sim_out, base_ax, xlim, ylim)
-    plot_dax(variable, sim_out, dax, xlim, ylim)
-    plot_ddax(variable, sim_out, ddax, xlim, ylim)
-    var_label = var_labels[variable]
-    fig.suptitle(f'${var_label}$ time plot')
-    fig.tight_layout()
-    if filename:
-        fig.savefig(filename)
-
-
-def state_space_plot(x, y, sim_out, filename=None):
-    fig, ax = plt.subplots(1, 1, figsize=(19.20, 10.80))
-    ax.grid()
-    ax.plot(sim_out[x], sim_out[y])
-    ax.set(xlabel=x, ylabel=y)
-    x_label = var_labels[x]
-    y_label = var_labels[y]
-    fig.suptitle(f'${x_label}$ X ${y_label}$')
-    fig.tight_layout()
-
-    if filename:
-        fig.savefig(filename, dpi=72, transparent=False, facecolor='white')
+from dynamo.drone.plotting import time_plot, plot2d
+from dynamo.drone.utils import STATES_NAMES
 
 
 def dump_simulation(sim_bunch, config_dict, refs):
@@ -149,18 +26,36 @@ def dump_simulation(sim_bunch, config_dict, refs):
         os.makedirs(output_dir)
     json_path = os.path.join(output_dir, "config.json")
     with open(json_path, "w") as json_file:
-        json.dump(config_dict, json_file)
+        json.dump(config_dict, json_file, indent=4)
     sim_df.to_csv(
         os.path.join(output_dir, "sim_out.csv")
     )
-    for var2plot in vars_to_plot:
-        time_plot(var2plot,
-                  sim_df,
-                  filename=os.path.join(
-                    output_dir, f'{var2plot}_plot.png'
-                  ))
-    state_space_plot('x', 'y', sim_df,
-                     filename=os.path.join(output_dir, 'xy_plot.png'))
+    time_plot(['x', 'y', 'z'], sim_df,
+              title='Position response',
+              filepath=os.path.join(output_dir, 'position_plot.png'),
+              diff_order=0)
+    time_plot(['x', 'y', 'z'], sim_df,
+              title='Linear speed response',
+              filepath=os.path.join(output_dir, 'linear_speed_plot.png'),
+              diff_order=1)
+    time_plot(['x', 'y', 'z'], sim_df,
+              title='Linear acceleration response',
+              filepath=os.path.join(output_dir, 'linear_accel_plot.png'),
+              diff_order=2)
+    time_plot(['phi', 'theta', 'psi'], sim_df,
+              title='Orientation response',
+              filepath=os.path.join(output_dir, 'orientation_plot.png'),
+              diff_order=0)
+    time_plot(['phi', 'theta', 'psi'], sim_df,
+              title='Angular Speed response',
+              filepath=os.path.join(output_dir, 'angular_speed_plot.png'),
+              diff_order=1)
+    time_plot(['phi', 'theta', 'psi'], sim_df,
+              title='Angular acceleration response',
+              filepath=os.path.join(output_dir, 'angular_accel_plot.png'),
+              diff_order=2)
+    plot2d('x', 'y', sim_df, diff_order=0,
+           filepath=os.path.join(output_dir, 'xy_plot.png'))
 
     refs_filepath = os.path.join(output_dir, 'refs.json')
     ref_dict = {
@@ -172,11 +67,11 @@ def dump_simulation(sim_bunch, config_dict, refs):
 
 
 gravity = 10
-drone_mass = 1
-jx = 1
-jy = 1
-jz = 1
-time_range = (0, 60)     # Seconds
+drone_mass = 10.920
+jx = 0.4417
+jy = 0.4417
+jz = 0.7420
+time_range = (0, 120)     # Seconds
 initial_states = [
     0,  # phi0,
     0,  # dphi0,
@@ -188,7 +83,7 @@ initial_states = [
     0,  # dx0,
     0,  # y0,
     0,  # dy0,
-    0,  # z0,
+    10,  # z0,
     0,  # dz0
 ]
 
@@ -202,21 +97,72 @@ A = np.array([
     ctau*s,
 ], dtype=np.float64)
 
-psifactor = 1e-1
-zfactor = 1e-1
-phifactor = 1e-1
-thetafactor = 1e-1
-xfactor = 1e-4
-yfactor = 1e-4
+# Previous setup
+# psifactor = 1e-1
+# zfactor = 1e-1
+# phifactor = 1e-1
+# thetafactor = 1e-1
+# xfactor = 1e-4
+# yfactor = 1e-4
+# kp_x = 40*xfactor
+# kd_x = 1000*xfactor
+# kp_y = 40*yfactor
+# kd_y = 1000*yfactor
+# kp_z = 2*zfactor
+# kd_z = 1*zfactor
+# kp_theta = 4*thetafactor
+# kd_theta = 10*thetafactor
+# kp_phi = 4*phifactor
+# kd_phi = 10*phifactor
+# kp_psi = 2*psifactor
+# kd_psi = 1*psifactor
 
-ws = 0.1
+# Jaccoud setup
+yawfactor = 1e-1/2/2
+zfactor = 1e-1/2/2
+rollfactor = 1e-1*1*10*3/2/2
+xfactor = 1e-4/2/2
+yfactor = 1e-4/2/2
+pitchfactor = 1e-1*1*10*3/2/2
+kp_psi = 2*yawfactor
+kd_psi = 10*yawfactor
+kp_z = 2*zfactor
+kd_z = 10*zfactor
+kp_x = 40*xfactor
+kd_x = 1000*xfactor*10
+kp_y = 40*yfactor
+kd_y = 1000*yfactor*10
+kp_theta = 40*pitchfactor*5/5/2
+kd_theta = 10*pitchfactor/2
+kp_phi = kp_theta
+kd_phi = kd_theta
+
+ws = {
+    'z': 2*np.pi/100,
+    'x': 2*np.pi/100,
+    'y': 2*np.pi/100,
+    'psi': 2*np.pi/100
+}
+amp = {
+    'z': 1,
+    'psi': 45*np.pi/180,
+    'x': 4,
+    'y': 4
+}
+dc = {
+    'z': 10,
+    'x': 0,
+    'y': 0,
+    'psi': 0*45*np.pi/180
+}
+
 
 config_dict = {
-    "constructor": "dynamo.drone.ControledDrone",
+    "constructor": "dynamo.drone.models.ControledDrone",
     "args": [],
     "kwargs": {
         "controller": {
-            "constructor": "dynamo.drone.DroneController",
+            "constructor": "dynamo.drone.controllers.DroneController",
             "args": [],
             "kwargs": {
                 "mass": drone_mass,
@@ -229,10 +175,10 @@ config_dict = {
                     "constructor": "dynamo.signal.TimeSignal",
                     "args": [],
                     "kwargs": {
-                        "x": f"sin({ws}*t)",
-                        "y": f"sin({ws}*t)",
-                        "z": "Heaviside(t, 1)",
-                        "psi": "0*Heaviside(t, 1)",
+                        "x": f"{amp['x']}*sin({ws['x']}*t) + {dc['x']}",
+                        "y": f"{amp['y']}*cos({ws['y']}*t) + {dc['y']}",
+                        "z": f"{amp['z']}*sin({ws['y']}*t) + {dc['z']}",
+                        "psi": f"{amp['psi']}*sin({ws['y']}*t) + {dc['psi']}",
                         "n_derivatives": 2
                     }
                 },
@@ -240,24 +186,24 @@ config_dict = {
                     "constructor": "dynamo.base.Bunch",
                     "args": [],
                     "kwargs": {
-                        "kp_x": 40*xfactor,
-                        "kd_x": 1000*xfactor,
-                        "kp_y": 40*yfactor,
-                        "kd_y": 1000*yfactor,
-                        "kp_z": 2*zfactor,
-                        "kd_z": 1*zfactor,
-                        "kp_theta": 4*thetafactor,
-                        "kd_theta": 10*thetafactor,
-                        "kp_phi": 4*phifactor,
-                        "kd_phi": 10*phifactor,
-                        "kp_psi": 2*psifactor,
-                        "kd_psi": 1*psifactor,
+                        "kp_x": kp_x,
+                        "kd_x": kd_x,
+                        "kp_y": kp_y,
+                        "kd_y": kd_y,
+                        "kp_z": kp_z,
+                        "kd_z": kd_z,
+                        "kp_theta": kp_theta,
+                        "kd_theta": kd_theta,
+                        "kp_phi": kp_phi,
+                        "kd_phi": kd_phi,
+                        "kp_psi": kp_psi,
+                        "kd_psi": kd_psi,
                     }
                 }
             }
         },
         "drone": {
-            "constructor": "dynamo.drone.Drone",
+            "constructor": "dynamo.drone.models.Drone",
             "args": [],
             "kwargs": {
                 "jx": jx,
@@ -285,10 +231,10 @@ print(f"Simulation outputted status {res.status}.\n\"{res.message}\"")
 
 # Saving output
 sim_out = np.concatenate((res.t.reshape(1, -1), res.y), axis=0).T
-sim_out = pd.DataFrame(sim_out, columns=['t']+drone_models.STATES_NAMES)
+sim_out = pd.DataFrame(sim_out, columns=['t']+STATES_NAMES)
 sim_bunch = controled_drone.output(
     sim_out['t'].values,
-    sim_out[drone_models.STATES_NAMES].values.T
+    sim_out[STATES_NAMES].values.T
 )
 
 dump_simulation(sim_bunch, config_dict, controled_drone.controller.refs)
