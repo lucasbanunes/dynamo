@@ -85,6 +85,10 @@ initial_states = [
     0,  # dy0,
     10,  # z0,
     0,  # dz0
+    0,  # ide_x0
+    0,  # ide_y0
+    0,  # ide_z0
+    0,  # ide_psi0
 ]
 
 d = 1
@@ -124,18 +128,47 @@ rollfactor = 1e-1*1*10*3/2/2
 xfactor = 1e-4/2/2
 yfactor = 1e-4/2/2
 pitchfactor = 1e-1*1*10*3/2/2
-kp_psi = 2*yawfactor
-kd_psi = 10*yawfactor
-kp_z = 2*zfactor
-kd_z = 10*zfactor
-kp_x = 40*xfactor
-kd_x = 1000*xfactor*10
-kp_y = 40*yfactor
-kd_y = 1000*yfactor*10
+# kp_psi = 2*yawfactor
+# kd_psi = 10*yawfactor
+# kp_z = 2*zfactor
+# kd_z = 10*zfactor
+# kp_x = 40*xfactor
+# kd_x = 1000*xfactor*10
+# kp_y = 40*yfactor
+# kd_y = 1000*yfactor*10
 kp_theta = 40*pitchfactor*5/5/2
 kd_theta = 10*pitchfactor/2
 kp_phi = kp_theta
 kd_phi = kd_theta
+
+Nx = 5
+Ny = 5
+Nz = 5
+Npsi = 5
+
+
+apx = 0.25*4/(Nx+1)
+apy = 0.25*4/(Ny+1)
+apz = 0.25*4/(Nz+1)
+appsi = 0.25*4/(Npsi+1)
+
+kd_x = apx
+kd_y = apy
+kd_z = apz
+kd_psi = appsi
+
+kd_x = (Nx+1)*apx
+ki_x = Nx*apx*apx
+kd_y = (Ny+1)*apy
+ki_y = Ny*apy*apy
+kd_z = (Nz+1)*apz
+ki_z = Nz*apz*apz
+kd_psi = (Npsi+1)*appsi
+ki_psi = Npsi*appsi*appsi
+kp_x = 0
+kp_y = 0
+kp_z = 0
+kp_psi = 0
 
 ws = {
     'z': 2*np.pi/100,
@@ -158,11 +191,11 @@ dc = {
 
 
 config_dict = {
-    "constructor": "dynamo.drone.models.ControledDrone",
+    "constructor": "dynamo.drone.models.SpeedControledDrone",
     "args": [],
     "kwargs": {
         "controller": {
-            "constructor": "dynamo.drone.controllers.DroneController",
+            "constructor": "dynamo.drone.controllers.SpeedDroneController",
             "args": [],
             "kwargs": {
                 "mass": drone_mass,
@@ -198,6 +231,10 @@ config_dict = {
                         "kd_phi": kd_phi,
                         "kp_psi": kp_psi,
                         "kd_psi": kd_psi,
+                        "ki_x": ki_x,
+                        "ki_y": ki_y,
+                        "ki_z": ki_z,
+                        "ki_psi": ki_psi
                     }
                 }
             }
@@ -231,10 +268,13 @@ print(f"Simulation outputted status {res.status}.\n\"{res.message}\"")
 
 # Saving output
 sim_out = np.concatenate((res.t.reshape(1, -1), res.y), axis=0).T
-sim_out = pd.DataFrame(sim_out, columns=['t']+STATES_NAMES)
+sim_out = pd.DataFrame(
+    sim_out,
+    columns=['t']+controled_drone.states_names
+)
 sim_bunch = controled_drone.output(
     sim_out['t'].values,
-    sim_out[STATES_NAMES].values.T
+    sim_out[controled_drone.states_names].values.T
 )
 
 dump_simulation(sim_bunch, config_dict, controled_drone.controller.refs)

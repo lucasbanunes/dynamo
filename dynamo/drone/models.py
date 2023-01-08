@@ -104,3 +104,70 @@ class ControledDrone():
         data = self.controller.output(t, data)
         data = self.drone.dx(t, data)
         return data
+
+
+class SpeedControledDrone():
+
+    def __init__(self, controller: DroneController, drone: Drone):
+        self.controller = controller
+        self.drone = drone
+        self.states_names = [
+            'phi',
+            'dphi',
+            'theta',
+            'dtheta',
+            'psi',
+            'dpsi',
+            'x',
+            'dx',
+            'y',
+            'dy',
+            'z',
+            'dz',
+            'ide_x',
+            'ide_y',
+            'ide_z',
+            'ide_psi'
+        ]
+        self.dstates_names = [
+            'dphi',
+            'ddphi',
+            'dtheta',
+            'ddtheta',
+            'dpsi',
+            'ddpsi',
+            'dx',
+            'ddx',
+            'dy',
+            'ddy',
+            'dz',
+            'ddz',
+            'de_x',
+            'de_y',
+            'de_z',
+            'de_psi'
+        ]
+
+    def __call__(self, t: Number,
+                 state_vector: NDArray[np.floating]
+                 ) -> NDArray[np.floating]:
+        data = self.output(t, state_vector)
+        simulation_dx = [
+            data[dstate_name]
+            for dstate_name in self.dstates_names
+        ]
+        simulation_dx = np.array(simulation_dx, dtype=np.float64)
+        return simulation_dx
+
+    def output(self, t: Number, state_vector: NDArray[np.floating]
+               ) -> NDArray[np.floating]:
+        data = self.parse_states(state_vector)
+        data = self.controller.output(t, data)
+        data = self.drone.dx(t, data)
+        return data
+
+    def parse_states(self, state_vector: NDArray[np.floating]) -> Bunch:
+        state_mapping = dict(zip(self.states_names, state_vector))
+        state_mapping['vector'] = state_vector
+        data = Bunch(**state_mapping)
+        return data

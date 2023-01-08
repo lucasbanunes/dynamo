@@ -76,31 +76,13 @@ class DynamicSystem(BaseModel):
     - output: For computing the system outputs
     """
 
+    @abstractmethod
     def dx(self, t: Number, data: Bunch) -> Bunch:
-        input_bunch = self.get_input_bunch(t, data)
-        output_bunch = self.transfer_names_call(input_bunch, self.get_dx)
-        out = self.add_renamed_outputs(output_bunch, data)
-        return out
+        return data
 
+    @abstractmethod
     def output(self, t: Number, data: Bunch) -> Bunch:
-        input_bunch = self.get_input_bunch(t, data)
-        output_bunch = self.transfer_names_call(input_bunch, self.get_output)
-        out = self.add_renamed_outputs(output_bunch, data)
-        return out
-
-    @abstractmethod
-    def get_dx(self, t: Number, input_args: Bunch) -> Any:
-        """
-        Method that computs the system update rule
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_output(self, t: Number, input_args: Bunch) -> Any:
-        """
-        Method that computs the system output
-        """
-        raise NotImplementedError
+        return data
 
 
 class Controller(BaseModel):
@@ -109,15 +91,6 @@ class Controller(BaseModel):
     a control logic that receives one or several inputs and returns an output
     to a plant.
     """
-    def output(self, t: Number, data: Bunch) -> Bunch:
-        input_bunch = self.get_input_bunch(t, data)
-        output_bunch = self.transfer_names_call(input_bunch, self.get_output)
-        out = self.add_renamed_outputs(output_bunch, data)
-        return out
-
     @abstractmethod
-    def get_output(self, t: Number, **kwargs) -> Bunch:
-        """
-        Method that computes the controller output for a given t time.
-        """
-        raise NotImplementedError
+    def output(self, t: Number, data: Bunch) -> Bunch:
+        return data
