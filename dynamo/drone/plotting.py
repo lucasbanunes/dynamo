@@ -6,19 +6,70 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 var_labels = {
-    "x": "x",
-    "y": "y",
-    "z": "z",
-    "phi": "\\phi",
-    "theta": "\\theta",
-    "psi": "\\psi"
-}
-
-linearized_inputs = {
-    'z': 'f',
-    'phi': 'm_x',
-    'theta': 'm_y',
-    'psi': 'm_z'
+    "px": "$p_x$",
+    "e_px": "$e_{{p_x}}$",
+    "ref_px": "$r_{p_x}$",
+    "py": "$p_y$",
+    "e_py": "$e_{{p_y}}$",
+    "ref_py": "$r_{p_y}$",
+    "pz": "$p_z$",
+    "e_pz": "$e_{{p_z}}$",
+    "ref_pz": "$r_{p_z}$",
+    "vx": "$v_x$",
+    "e_vx": "$e_{{v_x}}$",
+    "ref_vx": "$r_{{v_x}}$",
+    "ax": "$a_x$",
+    "e_ax": "$e_{{a_x}}$",
+    "ref_ax": "$r_{{a_x}}$",
+    "vy": "$v_y$",
+    "e_vy": "$e_{{v_y}}$",
+    "ref_vy": "$r_{{v_y}}$",
+    "ay": "$a_y$",
+    "e_ay": "$e_{{a_y}}$",
+    "ref_ay": "$r_{{a_y}}$",
+    "vz": "$v_z$",
+    "e_vz": "$e_{{v_z}}$",
+    "ref_vz": "$r_{{v_z}}$",
+    "az": "$a_z$",
+    "e_az": "$e_{{a_z}}$",
+    "ref_az": "$r_{{a_z}}$",
+    "phi": "$\\phi$",
+    "e_phi": "$e_{{\\phi}}$",
+    "ref_phi": "$r_{{\\phi}}$",
+    "vphi": "$v_{{\\phi}}$",
+    "e_vphi": "$e_{{v_{{\\phi}}}}$",
+    "ref_vphi": "$r_{{v_{{\\phi}}}}$",
+    "aphi": "$a_{{\\phi}}$",
+    "e_aphi": "$e_{{a_{{\\phi}}}}$",
+    "ref_aphi": "$r_{{a_{{\\phi}}}}$",
+    "theta": "$\\theta$",
+    "e_theta": "$e_{{\\theta}}$",
+    "ref_theta": "$r_{{\\theta}}$",
+    "vtheta": "$v_{{\\theta}}$",
+    "e_vtheta": "$e_{{v_{{\\theta}}}}$",
+    "ref_vtheta": "$r_{{v_{{\\theta}}}}$",
+    "atheta": "$a_{{\\theta}}$",
+    "e_atheta": "$e_{{a_{{\\theta}}}}$",
+    "ref_atheta": "$r_{{a_{{\\theta}}}}$",
+    "psi": "$\\psi$",
+    "e_psi": "$e_{{\\psi}}$",
+    "ref_psi": "$r_{{\\psi}}$",
+    "vpsi": "$v_{{\\psi}}$",
+    "e_vpsi": "$e_{{v_{{\\psi}}}}$",
+    "ref_vpsi": "$r_{{v_{{\\psi}}}}$",
+    "apsi": "$a_{{\\psi}}$",
+    "e_apsi": "$e_{{a_{{\\psi}}}}$",
+    "ref_apsi": "$r_{{a_{{\\psi}}}}$",
+    "u_x": "$u_x$",
+    "u_y": "$u_y$",
+    "u_z": "$u_z$",
+    "u_phi": "$u_{{\\phi}}$",
+    "u_theta": "$u_{{\\theta}}$",
+    "u_psi": "$u_{{\\psi}}$",
+    "f": "$f$",
+    "m_x": "$m_x$",
+    "m_y": "$m_y$",
+    "m_z": "$m_z$"
 }
 
 SAVEFIG_DEFAULTS = dict(
@@ -36,86 +87,67 @@ def get_final_label(label: str, diff_order: int = 0) -> str:
     return final_label
 
 
-def time_plot(variables: Sequence[str],
-              sim_out: pd.DataFrame,
+def time_plot(sim_out: pd.DataFrame,
+              main_y: Sequence[str],
+              sec_y: Sequence[str] = None,
               title: str = None,
               filepath: str = None,
               xlim: Tuple[Number, Number] = None,
-              ylim: Tuple[Number, Number] = None,
-              diff_order: int = 0
               ) -> Tuple[Figure, Axes]:
+    n_axes = len(main_y)
     fig, axes = plt.subplots(
-        len(variables), 1,
-        figsize=(19.20, 10.80)
+        n_axes, 1,
+        figsize=(19.20, 10.80),
+        sharex=True
     )
-    for i, zipped in enumerate(zip(axes, variables)):
+    if sec_y is None:
+        sec_y = [list() for _ in range(n_axes)]
+    for i, ax, imain_y, isec_y in zip(range(n_axes), axes, main_y, sec_y):
         lines = list()
-        ax, base_name = zipped
-        base_label = var_labels[base_name]
-        d_diffs = diff_order*"d"
-        var_name = d_diffs + base_name
-        ref_name = d_diffs + f"ref_{base_name}"
-        error_name = d_diffs + f"e_{base_name}"
-        input_name = d_diffs + f"u_{base_name}"
-        lin_name = linearized_inputs.get(base_name, None)
+        n_plotted = 0
         ax.grid()
-        var_label = get_final_label(base_label, diff_order)
-        ylabel = var_label
-        lines += ax.plot(sim_out['t'],
-                         sim_out[var_name],
-                         label=var_label,
-                         color='C0')
-        if ref_name in sim_out.columns:
-            ref_label = get_final_label(f'r_{{{base_label}}}', diff_order)
-            lines += ax.plot(sim_out['t'],
-                             sim_out[ref_name],
-                             label=ref_label,
-                             linestyle='--',
-                             color='k')
-            ylabel += f', {ref_label}'
-
-        if error_name in sim_out.columns:
-            error_label = get_final_label(f'e_{{{base_label}}}', diff_order)
-            lines += ax.plot(sim_out['t'],
-                             sim_out[error_name],
-                             label=error_label,
-                             linestyle='--',
-                             color='C1')
-            ylabel += f', {error_label}'
-
-        if input_name in sim_out.columns:
-            input_label = get_final_label(f'u_{{{base_label}}}', diff_order)
-            lines += ax.plot(sim_out['t'],
-                             sim_out[input_name],
-                             label=input_label,
-                             linestyle='--',
-                             color='C2')
-            ylabel += f', {input_label}'
-
-        if lin_name in sim_out.columns:
+        main_ylabels = list()
+        for main_var in imain_y:
+            var_label = var_labels[main_var]
+            lines += ax.plot(
+                sim_out["t"],
+                sim_out[main_var],
+                label=var_label,
+                color=f"C{n_plotted}"
+            )
+            n_plotted += 1
+            main_ylabels.append(var_label)
+        sec_ylabels = list()
+        for sec_var in isec_y:
+            var_label = var_labels[sec_var]
             twinx = ax.twinx()
-            lin_label = f"${lin_name}$"
-            lines += twinx.plot(sim_out['t'],
-                                sim_out[lin_name],
-                                label=lin_label,
-                                linestyle='--',
-                                color='C3')
-            twinx.set_ylabel(lin_label)
-            twinx.set(xlim=xlim, ylim=ylim)
+            lines += twinx.plot(
+                sim_out["t"],
+                sim_out[sec_var],
+                label=var_label,
+                color=f"C{n_plotted}"
+            )
+            n_plotted += 1
+            sec_ylabels.append(var_label)
 
-        labels = [iline.get_label() for iline in lines]
-        ax.legend(lines, labels)
-
-        is_last_ax = i < len(variables)-1
+        legend_labels = [iline.get_label() for iline in lines]
+        ax.legend(lines, legend_labels, fontsize="large")
+        main_ylabel = ", ".join(main_ylabels)
+        ax.set_ylabel(main_ylabel, fontsize="large")
+        is_last_ax = i < n_axes-1
         if is_last_ax:
             # Removes the xaxis ticks if not on last axis
-            ax.set(xticklabels=[], ylabel=ylabel, xlim=xlim, ylim=ylim)
+            ax.set(xticklabels=[])
         else:
-            ax.set(ylabel=ylabel, xlabel='Time (seconds)',
-                   xlim=xlim, ylim=ylim)
+            ax.set_xlabel("Time (seconds)", fontsize="large")
+            ax.set(xlabel="Time (seconds)")
+
+        if isec_y:
+            sec_ylabel = ", ".join(sec_ylabels)
+            twinx.set_ylabel(sec_ylabel, fontsize="large")
 
     if title:
-        fig.suptitle(title, fontsize='large')
+        fig.suptitle(title, fontsize='x-large')
     fig.tight_layout()
 
     if filepath:
@@ -126,28 +158,25 @@ def time_plot(variables: Sequence[str],
 
 def plot2d(x: str, y: str,
            sim_out: pd.DataFrame,
-           diff_order: int = 0,
            filepath: str = None
            ) -> Tuple[Figure, Axes]:
     fig, ax = plt.subplots(1, 1, figsize=(19.20, 10.80))
     ax.grid()
-    d_diffs = diff_order*"d"
-    x_name = d_diffs + x
-    y_name = d_diffs + y
-    x_label = get_final_label(var_labels[x], diff_order)
-    y_label = get_final_label(var_labels[y], diff_order)
-    ax.plot(sim_out[x_name], sim_out[y_name])
-    ax.set(xlabel=x_label, ylabel=y_label)
+    x_label = var_labels[x]
+    y_label = var_labels[y]
+    ax.plot(sim_out[x], sim_out[y])
+    ax.set_xlabel(x_label, fontsize="large")
+    ax.set_ylabel(y_label, fontsize="large")
 
-    ref_x_name = f"{d_diffs}ref_{x}"
-    ref_y_name = f"{d_diffs}ref_{y}"
+    ref_x_name = f"ref_{x}"
+    ref_y_name = f"ref_{y}"
     has_x_ref = ref_x_name in sim_out.columns
     has_y_ref = ref_y_name in sim_out.columns
     if has_x_ref and has_y_ref:
         ax.plot(sim_out[ref_x_name], sim_out[ref_y_name], label='ref')
 
-    ax.legend()
-    fig.suptitle(f'{x_label} X {y_label}')
+    ax.legend(fontsize="large")
+    fig.suptitle(f'{x_label} X {y_label}', fontsize="x-large")
     fig.tight_layout()
 
     if filepath:

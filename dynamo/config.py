@@ -48,7 +48,9 @@ def parse_config_kwargs(config_kwargs: Dict[str, DefaultTypes],
     return kwargs
 
 
-def parse_config_dict(config_dict: Dict[str, Any], parse_inner_objs: bool) -> Any:
+def parse_config_dict(config_dict: Dict[str, Any],
+                      parse_inner_objs: bool
+                      ) -> Any:
     constructor_name = config_dict["constructor"]
     name, attribute = split_import_name(constructor_name)
     package = import_module(name)

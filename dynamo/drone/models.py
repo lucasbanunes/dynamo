@@ -3,7 +3,7 @@ from numpy.typing import ArrayLike, NDArray
 from numbers import Number
 from dynamo.base import Bunch
 from dynamo.drone.utils import DroneStates
-from dynamo.drone.controllers import DroneController
+from dynamo.drone.controllers import PoseDroneController
 
 
 class Drone():
@@ -44,16 +44,19 @@ class Drone():
         spsi = np.sin(data.psi)
         cpsi = np.cos(data.psi)
 
-        dtheta = data.dtheta
-        dpsi = data.dpsi
-        dphi = data.dphi
-        data.ddphi = dtheta*dpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx
-        data.ddtheta = dphi*dpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy
-        data.ddpsi = dtheta*dphi*((self.jx-self.jy)/self.jz) + m_z/self.jz
-        data.ddx = f_over_m*((spsi*sphi) + (cphi*stheta*cpsi))
-        data.ddy = f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi))
-        data.ddz = -self.g+(cphi*ctheta*f_over_m)
+        vtheta = data.vtheta
+        vpsi = data.vpsi
+        vphi = data.vphi
+        data.aphi = vtheta*vpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx
+        data.atheta = vphi*vpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy
+        data.apsi = vtheta*vphi*((self.jx-self.jy)/self.jz) + m_z/self.jz
+        data.ax = f_over_m*((spsi*sphi) + (cphi*stheta*cpsi))
+        data.ay = f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi))
+        data.az = -self.g+(cphi*ctheta*f_over_m)
         return data
+
+    def output(self, t: Number, data: Bunch) -> Bunch:
+        return self.dx(t, data)
 
 
 class Propeller():
@@ -73,7 +76,7 @@ class Propeller():
 
 class ControledDrone():
 
-    def __init__(self, controller: DroneController, drone: Drone):
+    def __init__(self, controller: PoseDroneController, drone: Drone):
         self.controller = controller
         self.drone = drone
 
@@ -108,7 +111,7 @@ class ControledDrone():
 
 class SpeedControledDrone():
 
-    def __init__(self, controller: DroneController, drone: Drone):
+    def __init__(self, controller: PoseDroneController, drone: Drone):
         self.controller = controller
         self.drone = drone
         self.states_names = [
