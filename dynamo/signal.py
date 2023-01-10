@@ -25,34 +25,19 @@ class TimeSignal(Bunch):
     with key value pairs as {func_name: func_value}
     """
 
-    def __init__(self, n_derivatives: int = 0, **kwargs):
+    def __init__(self, **kwargs):
         if not kwargs:
             raise ValueError("The signal must have at least one function")
 
-        self.n_derivatives = int(n_derivatives)
-
-        funcs = dict()
+        sympy_locals = dict(t=sympy.Symbol("t", real=True))
         for func_name, func_str in kwargs.items():
-            sym_func = sympy.sympify(func_str)
-            funcs[func_name] = sym_func
-            self[f"sym_{func_name}"] = str(sym_func)
-            last_diff = sym_func
-            for diff_order in range(self.n_derivatives):
-                d_str = (diff_order+1)*"d"
-                diff_name = f"{d_str}{func_name}"
-                if "Heaviside" in func_str:
-                    sym_diff = sympy.diff("t-t", "t")
-                else:
-                    sym_diff = sympy.diff(last_diff, "t")
-                funcs[diff_name] = sym_diff
-                self[f"sym_{diff_name}"] = str(sym_diff)
-                last_diff = sym_diff
-
-        for func_name, sym_func in funcs.items():
+            sym_func = sympy.sympify(func_str, locals=sympy_locals)
             lambda_func = lambdify("t", sym_func, modules="numpy")
             self[func_name] = lambda_func
+            self[f"sym_{func_name}"] = str(sym_func)
+            sympy_locals[func_name] = sym_func
 
-        self.n_funcs = len(funcs)
+        self.n_funcs = len(sympy_locals) - 1  # removes t symbol
 
     def __call__(self, t: Number) -> List[Any]:
         if self.n_funcs > 1:
