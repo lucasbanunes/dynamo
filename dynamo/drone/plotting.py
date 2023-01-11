@@ -77,23 +77,38 @@ SAVEFIG_DEFAULTS = dict(
 )
 
 
-def get_final_label(label: str, diff_order: int = 0) -> str:
-    if diff_order:
-        d_diffs = diff_order*"d"
-        final_label = f"$\\{d_diffs}ot{{{label}}}$"
-    else:
-        final_label = f"${label}$"
-
-    return final_label
-
-
 def time_plot(sim_out: pd.DataFrame,
-              main_y: Sequence[str],
-              sec_y: Sequence[str] = None,
+              main_y: Sequence[Sequence[str]],
+              sec_y: Sequence[Sequence[str]] = None,
               title: str = None,
-              filepath: str = None,
-              xlim: Tuple[Number, Number] = None,
+              filepath: str = None
               ) -> Tuple[Figure, Axes]:
+    """
+    Makes a multiple xaxis sharing plots in one column
+    for comparing variables as function of time.
+
+    Parameters
+    ----------
+    sim_out : pd.DataFrame
+        DataFrame containg all simulation variables as columns
+    main_y : Sequence[Sequence[str]]
+        Each Sequence inside main_y represent the variables
+        to be plotted in one of the figure axis.
+    sec_y : Sequence[Sequence[str]], optional
+        Same as main_y but the variables described here are plotted on the
+        secondary (left) y axis.
+    title : str, optional
+        Plot figure title
+    filepath : str, optional
+        Path to save the file
+
+    Returns
+    -------
+    fig: Figure
+        The figure with the plots
+    axes: NDArray
+        Array containing wach ax object
+    """
     n_axes = len(main_y)
     fig, axes = plt.subplots(
         n_axes, 1,
@@ -113,7 +128,8 @@ def time_plot(sim_out: pd.DataFrame,
                 sim_out["t"],
                 sim_out[main_var],
                 label=var_label,
-                color=f"C{n_plotted}"
+                color=f"C{n_plotted}",
+                linestyle="--"
             )
             n_plotted += 1
             main_ylabels.append(var_label)
@@ -125,29 +141,26 @@ def time_plot(sim_out: pd.DataFrame,
                 sim_out["t"],
                 sim_out[sec_var],
                 label=var_label,
-                color=f"C{n_plotted}"
+                color=f"C{n_plotted}",
+                linestyle="--"
             )
             n_plotted += 1
             sec_ylabels.append(var_label)
 
         legend_labels = [iline.get_label() for iline in lines]
-        ax.legend(lines, legend_labels, fontsize="large")
+        ax.legend(lines, legend_labels, fontsize="x-large")
         main_ylabel = ", ".join(main_ylabels)
-        ax.set_ylabel(main_ylabel, fontsize="large")
-        is_last_ax = i < n_axes-1
+        ax.set_ylabel(main_ylabel, fontsize="x-large")
+        is_last_ax = i == n_axes-1
         if is_last_ax:
-            # Removes the xaxis ticks if not on last axis
-            ax.set(xticklabels=[])
-        else:
-            ax.set_xlabel("Time (seconds)", fontsize="large")
-            ax.set(xlabel="Time (seconds)")
+            ax.set_xlabel("Time (seconds)", fontsize="x-large")
 
         if isec_y:
             sec_ylabel = ", ".join(sec_ylabels)
-            twinx.set_ylabel(sec_ylabel, fontsize="large")
+            twinx.set_ylabel(sec_ylabel, fontsize="x-large")
 
     if title:
-        fig.suptitle(title, fontsize='x-large')
+        fig.suptitle(title, fontsize="xx-large")
     fig.tight_layout()
 
     if filepath:
@@ -160,13 +173,35 @@ def plot2d(x: str, y: str,
            sim_out: pd.DataFrame,
            filepath: str = None
            ) -> Tuple[Figure, Axes]:
+    """
+    Plots two simulation variables against each other.
+    Useful for visualizing trajectories.
+
+    Parameters
+    ----------
+    x : str
+        Name of the vairable of x axis
+    y : str
+        Name of the variable of the y axis
+    sim_out : pd.DataFrame
+        DataFrame containg all simulation variables as columns
+    filepath : str, optional
+        Path to save the file
+
+    Returns
+    -------
+    fig: Figure
+        The figure with the plots
+    axes: NDArray
+        Array containing wach ax object
+    """
     fig, ax = plt.subplots(1, 1, figsize=(19.20, 10.80))
     ax.grid()
     x_label = var_labels[x]
     y_label = var_labels[y]
     ax.plot(sim_out[x], sim_out[y])
-    ax.set_xlabel(x_label, fontsize="large")
-    ax.set_ylabel(y_label, fontsize="large")
+    ax.set_xlabel(x_label, fontsize="x-large")
+    ax.set_ylabel(y_label, fontsize="x-large")
 
     ref_x_name = f"ref_{x}"
     ref_y_name = f"ref_{y}"
@@ -175,7 +210,7 @@ def plot2d(x: str, y: str,
     if has_x_ref and has_y_ref:
         ax.plot(sim_out[ref_x_name], sim_out[ref_y_name], label='ref')
 
-    ax.legend(fontsize="large")
+    ax.legend(fontsize="x-large")
     fig.suptitle(f'{x_label} X {y_label}', fontsize="x-large")
     fig.tight_layout()
 

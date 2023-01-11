@@ -8,13 +8,19 @@ from dynamo.base import Bunch
 class TimeSignal(Bunch):
     """
     Object that implements multiple functions that represent one signal.
-    This is specially useful or reference signals that must have their
-    elementary functions and its derivatives called for control logics.
+    This is specially useful or reference signals that may have multiple
+    components.
 
     This class can receive a multiple number of functions through the
     kwargs argument that can be later be acessed as an attribute.
     All the functions must be declared as a string that will latter
     be casted to a lambda function with sympy lambdify function.
+    Therefore, any function supported by sympy.sympify can be
+    defined to this object.
+
+    From python 3.7 ownards dicts are ordered so a later variable
+    can reference a previous one for definition. This is specially
+    useful for algebric differentiation and integration.
 
     Since its a time signal all functions are supposed to receive
     one parameter only, the time (t).

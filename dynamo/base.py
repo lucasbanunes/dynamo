@@ -1,12 +1,13 @@
 from collections.abc import MutableMapping
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
+from typing import Any
 from numbers import Number
 import pandas as pd
 
 
 class Bunch(MutableMapping):
-    """Container object exposing keys as attributes."""
+    """Container object exposing keys as attributes.
+    Inherits from collections.abs.MutableMapping"""
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -42,33 +43,7 @@ class Bunch(MutableMapping):
         return df
 
 
-class BaseModel(ABC):
-
-    def __init__(self,
-                 input_vars: Mapping[str, str],
-                 output_vars: Mapping[str, str],
-                 **kwargs):
-        self.input_vars = input_vars
-        self.output_vars = output_vars
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    def get_input_bunch(self, t: Number, data: Bunch) -> Bunch:
-        input_bunch = Bunch()
-        for var_name, data_name in self.input_vars.items():
-            input_bunch[var_name] = data[data_name]
-        input_bunch.t = t
-        return input_bunch
-
-    def add_renamed_outputs(self, output_bunch: Bunch,
-                            data: Bunch
-                            ) -> Bunch:
-        for var_name, data_name in self.output_kwargs.items():
-            data[data_name] = output_bunch[var_name]
-        return data
-
-
-class DynamicSystem(BaseModel):
+class DynamicSystem(ABC):
     """
     Class that represents a Dynamic System.
     A dynamic system is an object that implements the following methods:
@@ -85,7 +60,7 @@ class DynamicSystem(BaseModel):
         return data
 
 
-class Controller(BaseModel):
+class Controller(ABC):
     """
     The Controller class is an abstract class that represents
     a control logic that receives one or several inputs and returns an output

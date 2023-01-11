@@ -1,12 +1,26 @@
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from numbers import Number
 from dynamo.base import Bunch, Controller
 from dynamo.signal import TimeSignal
 
 
 @np.vectorize
-def saturated_arcsin(x):
+def saturated_arcsin(x: Number) -> NDArray[np.floating]:
+    """
+    Alternative arcsin for simulating.
+    Due to project mistakes or numeric errors
+    a arcsin function may receive x > 1 or x < -1.
+    Vectorized with numpy.vectorize
+
+    Parameters
+    ----------
+    x : Number
+
+    Returns
+    -------
+    NDArray[np.floating]
+    """
     if x > 1:
         return np.pi/2
     elif x < -1:
@@ -16,6 +30,10 @@ def saturated_arcsin(x):
 
 
 class BaseDroneController(Controller):
+    """
+    Base utils for the drone system controller design
+    defined in dynamo.drone.models.Drone
+    """
 
     def __init__(self, refs: TimeSignal, gains: Bunch,
                  mass: Number, g: Number,
@@ -34,6 +52,20 @@ class BaseDroneController(Controller):
         self.Ainv = np.linalg.inv(Ainv)
 
     def add_internal_refs(self, data: Bunch) -> Bunch:
+        """
+        Calculates the references for the internal phi (pitch)
+        and theta (roll) control.
+
+        Parameters
+        ----------
+        data : Bunch
+            Bunch object with input data
+
+        Returns
+        -------
+        Bunch
+            The same Bunch input object
+        """
         spsi = np.sin(data.psi)
         cpsi = np.cos(data.psi)
         mf = self.mass/data.f
@@ -74,8 +106,34 @@ class BaseDroneController(Controller):
 
 
 class PoseDroneController(BaseDroneController):
+    """
+    Drone position/orientation controller.
+    This Controller implements:
+    - Feedback linearization with pd control for z axis position and psi (roll)
+    - pd control for x axis and y axis positions
+    - Internal phi (pitch) and theta (roll) control by assuming
+    the approximation of a double integrator as roll and pitch dynamics
+    when applied with low speeds but fast enough speeds such that the 
+    current values are approxmately the reference values.
+    """
 
     def output(self, t: Number, data: Bunch) -> Bunch:
+        """
+        Adds the control output variables to data inplace.
+
+        Parameters
+        ----------
+        t : Number
+            Simulation time
+        data : Bunch
+            Input bunch variables
+
+        Returns
+        -------
+        Bunch
+            Same instance from data but with the output variables
+            added
+        """
 
         data.t = np.float64(t)
         data.ref_px = self.refs.px(t)
@@ -157,8 +215,32 @@ class PoseDroneController(BaseDroneController):
 
 
 class SpeedDroneController(BaseDroneController):
+    """
+    Drone velocity controller.
+    This Controller implements:
+    - Feedback linearization with pd control for z axis and psi (roll) speeds.
+    - pd control for x axis and y axis speeds.
+    - Internal phi (pitch) and theta (roll) control from the desired x and y
+    speeds.
+    """
 
     def output(self, t: Number, data: Bunch) -> Bunch:
+        """
+        Adds the control output variables to data inplace.
+
+        Parameters
+        ----------
+        t : Number
+            Simulation time
+        data : Bunch
+            Input bunch variables
+
+        Returns
+        -------
+        Bunch
+            Same instance from data but with the output variables
+            added
+        """
 
         data.t = np.float64(t)
         data.ref_px = self.refs.px(t)
