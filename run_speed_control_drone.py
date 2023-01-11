@@ -1,3 +1,9 @@
+"""
+Runs the speed controlled drone simulation and saves its
+results to the "output" folder which is automatically created on
+the script dir.
+"""
+
 import os
 import json
 import numpy as np
@@ -33,9 +39,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["px", "e_px", "ref_px"],
-            ["py", "e_py", "ref_py"],
-            ["pz", "e_pz", "ref_pz"],
+            ["px", "ie_vx"],
+            ["py", "ie_vy"],
+            ["pz", "ie_vz"],
         ],
         sec_y=[
             [],
@@ -48,9 +54,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["vx", "e_vx", "u_x", "ref_vx"],
-            ["vy", "e_vy", "u_y", "ref_vy"],
-            ["vz", "e_vz", "u_z", "ref_vz"],
+            ["vx", "ref_vx", "e_vx", "u_x"],
+            ["vy", "ref_vy", "e_vy", "u_y"],
+            ["vz", "ref_vz", "e_vz", "u_z"],
         ],
         title="Linear Speed response",
         filepath=os.path.join(output_dir, 'linear_speed_plot.png')
@@ -58,9 +64,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["ax", "ref_ax"],
-            ["ay", "ref_ay"],
-            ["az", "ref_az"],
+            ["ax"],
+            ["ay"],
+            ["az"],
         ],
         title="Linear Acceleration response",
         filepath=os.path.join(output_dir, 'linear_accel_plot.png')
@@ -68,9 +74,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["theta", "e_theta", "ref_theta"],
-            ["phi", "e_phi", "ref_phi"],
-            ["psi", "e_psi", "ref_psi"],
+            ["theta", "e_stheta"],
+            ["phi", "e_sphi"],
+            ["psi", "ie_vpsi"],
         ],
         sec_y=[
             ["m_x"],
@@ -83,9 +89,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["vtheta", "e_vtheta", "u_theta", "ref_vtheta"],
-            ["vphi", "e_vphi", "u_phi", "ref_vphi"],
-            ["vpsi", "e_vpsi", "u_psi", "ref_vpsi"],
+            ["vtheta", "ref_vtheta", "e_vtheta", "u_theta"],
+            ["vphi", "ref_vphi", "e_vphi", "u_phi"],
+            ["vpsi", "ref_vpsi", "e_vpsi", "u_psi"],
         ],
         title="Angular Speed response",
         filepath=os.path.join(output_dir, 'angular_speed_plot.png')
@@ -93,9 +99,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["atheta", "ref_atheta"],
-            ["aphi", "ref_aphi"],
-            ["apsi", "ref_apsi"],
+            ["atheta"],
+            ["aphi"],
+            ["apsi"],
         ],
         title="Angular Acceleration response",
         filepath=os.path.join(output_dir, 'angular_accel_plot.png')
@@ -117,7 +123,7 @@ drone_mass = 10.920
 jx = 0.4417
 jy = 0.4417
 jz = 0.7420
-time_range = (0, 10)     # Seconds
+time_range = (0, 120)     # Seconds
 states_names = [
     "phi",
     "vphi",
@@ -183,39 +189,31 @@ A = np.array([
     ctau*s,
 ], dtype=np.float64)
 
+
+yawfactor = 1e-1/2/2
+zfactor = 1e-1/2/2
+rollfactor = 1e-1*1*10*3/2/2
+xfactor = 1e-4/2/2
+yfactor = 1e-4/2/2
 pitchfactor = 1e-1*1*10*3/2/2
+kp_psi = 2*yawfactor
+kd_psi = 10*yawfactor
+kp_z = 2*zfactor
+kd_z = 10*zfactor
+kp_x = 40*xfactor
+kd_x = 1000*xfactor*10
+kp_y = 40*yfactor
+kd_y = 1000*yfactor*10
 kp_theta = 40*pitchfactor*5/5/2
 kd_theta = 10*pitchfactor/2
 kp_phi = kp_theta
 kd_phi = kd_theta
-
-Nx = 5
-Ny = 5
-Nz = 5
-Npsi = 5
-
-apx = 0.25*4/(Nx+1)
-apy = 0.25*4/(Ny+1)
-apz = 0.25*4/(Nz+1)
-appsi = 0.25*4/(Npsi+1)
-
-kd_x = apx
-kd_y = apy
-kd_z = apz
-kd_psi = appsi
-
-kd_x = (Nx+1)*apx
-ki_x = Nx*apx*apx
-kd_y = (Ny+1)*apy
-ki_y = Ny*apy*apy
-kd_z = (Nz+1)*apz
-ki_z = Nz*apz*apz
-kd_psi = (Npsi+1)*appsi
-ki_psi = Npsi*appsi*appsi
-kp_x = 0
-kp_y = 0
-kp_z = 0
-kp_psi = 0
+ki_theta = kp_theta
+ki_phi = kp_phi
+ki_psi = kp_psi
+ki_x = kp_x
+ki_y = kp_y
+ki_z = kp_z
 
 ws = {
     'z': 2*np.pi/100,
@@ -230,7 +228,7 @@ amp = {
     'y': 4
 }
 dc = {
-    'z': 10,
+    'z': 0,
     'x': 0,
     'y': 0,
     'psi': 0*45*np.pi/180
@@ -255,18 +253,11 @@ config_dict = {
                     "constructor": "dynamo.signal.TimeSignal",
                     "args": [],
                     "kwargs": {
-                        "px": f"{amp['x']}*sin({ws['x']}*t) + {dc['x']}",
-                        "vx": "diff(px, t)",
-                        "ax": "diff(vx, t)",
-                        "py": f"{amp['y']}*cos({ws['y']}*t) + {dc['y']}",
-                        "vy": "diff(py, t)",
-                        "ay": "diff(ay, t)",
-                        "pz": f"{amp['z']}*sin({ws['y']}*t) + {dc['z']}",
-                        "vz": "diff(pz, t)",
-                        "az": "diff(az, t)",
-                        "psi": f"{amp['psi']}*sin({ws['y']}*t) + {dc['psi']}",
-                        "vpsi": "diff(psi, t)",
-                        "apsi": "diff(vpsi, t)",
+                        "vx": f"{amp['x']}*sign(sin({ws['x']}*t) + {dc['x']})",
+                        "vy": f"{amp['y']}*sign(cos({ws['y']}*t) + {dc['y']})",
+                        "vz": f"{amp['z']}*sign(sin({ws['z']}*t) + {dc['z']})",
+                        "vpsi": (f"{amp['psi']}*sign(sin({ws['psi']}*t)"
+                                 f"+ {dc['psi']})"),
                     }
                 },
                 "gains": {

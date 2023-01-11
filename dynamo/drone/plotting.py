@@ -74,7 +74,9 @@ var_labels = {
     "ie_vz": "$\\int e_{{v_z}}$",
     "ie_vtheta": "$\\int e_{{v_{{\\theta}}}}$",
     "ie_vphi": "$\\int e_{{v_{{\\phi}}}}$",
-    "ie_vpsi": "$\\int e_{{v_{{\\psi}}}}$"
+    "ie_vpsi": "$\\int e_{{v_{{\\psi}}}}$",
+    "e_stheta": "$e_{{sin(\\theta)}}$",
+    "e_sphi": "$e_{{sin(\\phi)}}$"
 }
 
 
