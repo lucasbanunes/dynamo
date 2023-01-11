@@ -1,0 +1,144 @@
+{
+    "constructor": "dynamo.models.ControlledSystem",
+    "args": [],
+    "kwargs": {
+        "controller": {
+            "constructor": "dynamo.drone.controllers.PoseDroneController",
+            "args": [],
+            "kwargs": {
+                "mass": 10.92,
+                "jx": 0.4417,
+                "jy": 0.4417,
+                "jz": 0.742,
+                "A": [
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        0.0,
+                        1.0,
+                        0.0,
+                        -1.0
+                    ],
+                    [
+                        -1.0,
+                        0.0,
+                        1.0,
+                        0.0
+                    ],
+                    [
+                        0.1,
+                        0.7,
+                        0.3,
+                        0.5
+                    ]
+                ],
+                "g": 10,
+                "refs": {
+                    "constructor": "dynamo.signal.TimeSignal",
+                    "args": [],
+                    "kwargs": {
+                        "px": "4*sin(0.06283185307179587*t) + 0",
+                        "vx": "diff(px, t)",
+                        "ax": "diff(vx, t)",
+                        "py": "4*cos(0.06283185307179587*t) + 0",
+                        "vy": "diff(py, t)",
+                        "ay": "diff(ay, t)",
+                        "pz": "1*sin(0.06283185307179587*t) + 10",
+                        "vz": "diff(pz, t)",
+                        "az": "diff(az, t)",
+                        "psi": "0.7853981633974483*sin(0.06283185307179587*t) + 0.0",
+                        "vpsi": "diff(psi, t)",
+                        "apsi": "diff(vpsi, t)"
+                    }
+                },
+                "gains": {
+                    "constructor": "dynamo.base.Bunch",
+                    "args": [],
+                    "kwargs": {
+                        "kp_x": 0.001,
+                        "kd_x": 0.25,
+                        "kp_y": 0.001,
+                        "kd_y": 0.25,
+                        "kp_z": 0.05,
+                        "kd_z": 0.25,
+                        "kp_theta": 15.0,
+                        "kd_theta": 3.75,
+                        "kp_phi": 15.0,
+                        "kd_phi": 3.75,
+                        "kp_psi": 0.05,
+                        "kd_psi": 0.25
+                    }
+                }
+            }
+        },
+        "system": {
+            "constructor": "dynamo.drone.models.Drone",
+            "args": [],
+            "kwargs": {
+                "jx": 0.4417,
+                "jy": 0.4417,
+                "jz": 0.742,
+                "g": 10,
+                "mass": 10.92,
+                "A": [
+                    [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    [
+                        0.0,
+                        1.0,
+                        0.0,
+                        -1.0
+                    ],
+                    [
+                        -1.0,
+                        0.0,
+                        1.0,
+                        0.0
+                    ],
+                    [
+                        0.1,
+                        0.7,
+                        0.3,
+                        0.5
+                    ]
+                ]
+            }
+        },
+        "states_names": [
+            "phi",
+            "vphi",
+            "theta",
+            "vtheta",
+            "psi",
+            "vpsi",
+            "px",
+            "vx",
+            "py",
+            "vy",
+            "pz",
+            "vz"
+        ],
+        "dstates_names": [
+            "vphi",
+            "aphi",
+            "vtheta",
+            "atheta",
+            "vpsi",
+            "apsi",
+            "vx",
+            "ax",
+            "vy",
+            "ay",
+            "vz",
+            "az"
+        ]
+    }
+}
