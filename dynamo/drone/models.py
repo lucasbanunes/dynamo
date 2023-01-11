@@ -64,12 +64,12 @@ class Drone():
         vtheta = data.vtheta
         vpsi = data.vpsi
         vphi = data.vphi
-        data.aphi = 0*(vtheta*vpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx)
-        data.atheta = 0*(vphi*vpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy)
+        data.aphi = (vtheta*vpsi*((self.jy-self.jz)/self.jx) + m_x/self.jx)
+        data.atheta = (vphi*vpsi*((self.jz-self.jx)/self.jy) + m_y/self.jy)
         data.apsi = (vtheta*vphi*((self.jx-self.jy)/self.jz) + m_z/self.jz)
-        data.ax = 0*(f_over_m*((spsi*sphi) + (cphi*stheta*cpsi)))
-        data.ay = 0*(f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi)))
-        data.az = 0*(-self.g+(cphi*ctheta*f_over_m))
+        data.ax = (f_over_m*((spsi*sphi) + (cphi*stheta*cpsi)))
+        data.ay = (f_over_m*((-cpsi*sphi) + (spsi*stheta*cphi)))
+        data.az = (-self.g+(cphi*ctheta*f_over_m))
         return data
 
     def output(self, t: Number, data: Bunch) -> Bunch:
