@@ -1,5 +1,4 @@
 from typing import Sequence, Tuple
-from numbers import Number
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
@@ -69,8 +68,15 @@ var_labels = {
     "f": "$f$",
     "m_x": "$m_x$",
     "m_y": "$m_y$",
-    "m_z": "$m_z$"
+    "m_z": "$m_z$",
+    "ie_vx": "$\\int e_{{v_x}}$",
+    "ie_vy": "$\\int e_{{v_y}}$",
+    "ie_vz": "$\\int e_{{v_z}}$",
+    "ie_vtheta": "$\\int e_{{v_{{\\theta}}}}$",
+    "ie_vphi": "$\\int e_{{v_{{\\phi}}}}$",
+    "ie_vpsi": "$\\int e_{{v_{{\\psi}}}}$"
 }
+
 
 SAVEFIG_DEFAULTS = dict(
     dpi=72, transparent=False, facecolor='white'

@@ -9,7 +9,7 @@ class ControlledSystem(DynamicSystem):
     """
     Representation of a system represented by a controller
     and a system to be controlled (plant). Controller.output
-    is called on a Bunch instance containg the states and its 
+    is called on a Bunch instance containg the states and its
     return is fed to the plant output.
     Automatically build input bunch and the states derivative as
     an array for compatibility with scipy ivp solvers.

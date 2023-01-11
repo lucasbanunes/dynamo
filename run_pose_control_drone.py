@@ -1,3 +1,8 @@
+"""
+Runs the position controlled drone simulation and saves its
+results to the "output" folder which is automatically created on
+the script dir.
+"""
 import os
 import json
 import numpy as np
@@ -33,9 +38,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["px", "e_px", "u_x", "ref_px"],
-            ["py", "e_py", "u_y", "ref_py"],
-            ["pz", "e_pz", "u_z", "ref_pz"],
+            ["px", "ref_px", "e_px", "u_x"],
+            ["py", "ref_py", "e_py", "u_y"],
+            ["pz", "ref_pz", "e_pz", "u_z"],
         ],
         sec_y=[
             [],
@@ -48,9 +53,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["vx", "e_vx", "ref_vx"],
-            ["vy", "e_vy", "ref_vy"],
-            ["vz", "e_vz", "ref_vz"],
+            ["vx", "ref_vx", "e_vx"],
+            ["vy", "ref_vy", "e_vy"],
+            ["vz", "ref_vz", "e_vz"],
         ],
         title="Linear Speed response",
         filepath=os.path.join(output_dir, 'linear_speed_plot.png')
@@ -68,9 +73,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["theta", "e_theta", "u_theta", "ref_theta"],
-            ["phi", "e_phi", "u_phi", "ref_phi"],
-            ["psi", "e_psi", "u_psi", "ref_psi"],
+            ["theta", "ref_theta", "e_theta", "u_theta"],
+            ["phi", "ref_phi", "e_phi", "u_phi"],
+            ["psi", "ref_psi", "e_psi", "u_psi"],
         ],
         sec_y=[
             ["m_x"],
@@ -83,9 +88,9 @@ def dump_simulation(sim_bunch, config_dict, refs):
     time_plot(
         sim_df,
         main_y=[
-            ["vtheta", "e_vtheta", "ref_vtheta"],
-            ["vphi", "e_vphi", "ref_vphi"],
-            ["vpsi", "e_vpsi", "ref_vpsi"],
+            ["vtheta", "ref_vtheta", "e_vtheta"],
+            ["vphi", "ref_vphi", "e_vphi"],
+            ["vpsi", "ref_vpsi", "e_vpsi"],
         ],
         title="Angular Speed response",
         filepath=os.path.join(output_dir, 'angular_speed_plot.png')
